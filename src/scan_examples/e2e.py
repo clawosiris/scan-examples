@@ -140,14 +140,20 @@ def run_lifecycle(
     deadline = time.monotonic() + max(results_timeout, 0)
     attempts = 0
     results: list[dict[str, Any]] = []
+    findings_seen = False
     while True:
         attempts += 1
         _emit(progress, f"Fetching results for {scan_id} (poll {attempts})")
         results = client.get_results(scan_id)
         if results:
+            findings_seen = True
             _emit(progress, f"Fetched {len(results)} findings")
             break
-        if time.monotonic() >= deadline:
+
+        now = time.monotonic()
+        if now >= deadline:
+            _emit(progress, f"No findings before timeout; stopping scan {scan_id}")
+            client.stop_scan(scan_id)
             raise RuntimeError(
                 f"Timed out after {results_timeout:g}s waiting for findings for scan {scan_id}"
             )
@@ -155,6 +161,11 @@ def run_lifecycle(
         time.sleep(results_poll_interval)
 
     findings_summary = summarize_results(results)
+
+    stop_response = None
+    if findings_seen:
+        _emit(progress, f"Stopping scan {scan_id}")
+        stop_response = client.stop_scan(scan_id)
 
     _emit(progress, f"Deleting scan {scan_id}")
     delete_response = client.delete_scan(scan_id)
@@ -164,7 +175,7 @@ def run_lifecycle(
         scan_id=scan_id,
         create_response=create_response,
         start_response=start_response,
-        stop_response=None,
+        stop_response=stop_response,
         results=results,
         findings_summary=findings_summary,
         delete_response=delete_response,

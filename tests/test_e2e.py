@@ -25,6 +25,10 @@ class DummyClient:
             return self.results_sequence.pop(0)
         return self.results_sequence[0]
 
+    def stop_scan(self, scan_id: str):
+        self.calls.append(("stop", scan_id))
+        return {"status": "stopped"}
+
     def delete_scan(self, scan_id: str):
         self.calls.append(("delete", scan_id))
         return {"status": "deleted"}
@@ -82,6 +86,7 @@ def test_run_lifecycle_emits_progress_in_order(monkeypatch):
     )
 
     assert result.findings_summary["total"] == 2
+    assert result.stop_response == {"status": "stopped"}
     assert messages == [
         "Creating scan (attempt 1/12)",
         "Created scan scan-123",
@@ -90,6 +95,7 @@ def test_run_lifecycle_emits_progress_in_order(monkeypatch):
         "No findings yet; waiting 5s before retrying",
         "Fetching results for scan-123 (poll 2)",
         "Fetched 2 findings",
+        "Stopping scan scan-123",
         "Deleting scan scan-123",
         "Deleted scan scan-123",
     ]
