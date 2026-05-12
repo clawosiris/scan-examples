@@ -13,6 +13,30 @@ Example code for using the OpenVAS scanner container REST API with the Greenbone
   - a metasploitable target container
 - Unit tests and a self-hosted GitHub Actions workflow for end-to-end validation
 
+## Configuration
+
+This example targets the **Greenbone community container** deployment shown in `docker-compose.yml`.
+
+- Scanner API endpoint inside Compose: `http://openvasd:80`
+- Scanner API endpoint from the host: `http://localhost:3000`
+- Community feed mounts expected by the example:
+  - data objects: `/feed/data-objects`
+  - vulnerability tests: `/feed/vulnerability-tests`
+- Certificates:
+  - the bundled Compose environment uses plain HTTP internally, so no client certificate files are required for the example workflow
+  - if you point the CLI at an HTTPS scanner endpoint, trust the server certificate in your runtime or use `--insecure` only for throwaway lab testing
+
+Supported environment variables:
+
+- `SCANNER_API_URL` — scanner REST API base URL
+- `SCANNER_API_TIMEOUT` — HTTP timeout in seconds
+- `DATA_OBJECTS_PATH` — mounted community `data-objects` feed path
+- `VT_PATH` — mounted community `vulnerability-tests` feed path
+- `SCANNERCTL_BIN` — path to `scannerctl`
+- `TARGET_TCP_PORTS` — default comma-separated TCP ports for the target definition
+- `WAIT_BEFORE_RESULTS` — delay between start and stop/results in the `e2e` flow
+- `CREATE_SCAN_RETRIES` / `CREATE_SCAN_RETRY_DELAY` — API warm-up retry controls for scan creation
+
 ## CLI commands
 
 The Docker image and local package expose `openvas-example`.
