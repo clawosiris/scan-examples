@@ -83,13 +83,17 @@ def cmd_e2e(args: argparse.Namespace) -> int:
     def progress(message: str) -> None:
         print(f"[e2e] {message}", file=sys.stderr, flush=True)
 
+    tcp_ports = _parse_ports(args.tcp_ports)
+    ports_rendered = ", ".join(str(port) for port in tcp_ports) if tcp_ports else "default port list from scanner config"
+    progress(f"Target hosts: {', '.join(args.host)}")
+    progress(f"Scanning TCP ports: {ports_rendered}")
     progress("Discovering Greenbone community feed layout")
     layout = discover_feed_layout(args.data_objects_path, args.vt_path)
     progress("Converting Full & Fast configuration with scannerctl")
     payload = convert_full_and_fast(
         layout=layout,
         hosts=args.host,
-        tcp_ports=_parse_ports(args.tcp_ports),
+        tcp_ports=tcp_ports,
         scannerctl_bin=args.scannerctl_bin,
     )
     client = _build_client(args)

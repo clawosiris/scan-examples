@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+from scan_examples import cli
 from scan_examples.cli import build_parser
 
 
@@ -32,3 +35,37 @@ def test_build_parser_uses_metasploitable_port_defaults():
     ])
 
     assert args.tcp_ports == "21,22,80,139,445,3306"
+
+
+def test_cmd_e2e_logs_scanned_ports(monkeypatch, capsys, tmp_path):
+    parser = build_parser()
+    output_path = tmp_path / "result.json"
+    args = parser.parse_args([
+        "e2e",
+        "--host",
+        "target",
+        "--tcp-ports",
+        "22,80,445",
+        "--output",
+        str(output_path),
+    ])
+
+    monkeypatch.setattr(cli, "discover_feed_layout", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(cli, "convert_full_and_fast", lambda **_kwargs: {"target": {}, "vts": []})
+
+    class DummyClient:
+        pass
+
+    monkeypatch.setattr(cli, "_build_client", lambda _args: DummyClient())
+
+    class DummyResult:
+        findings_summary = {"total": 0, "by_severity": {}, "by_type": {}}
+
+    monkeypatch.setattr(cli, "run_lifecycle", lambda **_kwargs: DummyResult())
+    monkeypatch.setattr(cli, "dump_result", lambda _result: '{"ok": true}')
+
+    assert cli.cmd_e2e(args) == 0
+
+    captured = capsys.readouterr()
+    assert "[e2e] Scanning TCP ports: 22, 80, 445" in captured.err
+    assert Path(output_path).read_text(encoding="utf-8") == '{"ok": true}\n'
