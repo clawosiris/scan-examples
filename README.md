@@ -86,7 +86,7 @@ While it runs, the CLI now emits step-by-step progress logs to stderr (handy in 
 
 The bundled target is `kirscht/metasploitable3-ub1404` with FTP, SSH, HTTP, SMB, and MySQL enabled. The default scanned TCP port set is `21,22,80,139,445,3306`, which gives the example a realistic multi-service target for local runs and CI.
 
-The enrichment step uses `vt-metadata.json` from the mounted vulnerability-test feed. The code checks both `<VT_PATH>/vt-metadata.json` and `<VT_PATH>/nasl/vt-metadata.json`. If the file is unavailable, the workflow still returns raw results and marks enrichment as unavailable instead of faceplanting.
+The enrichment step uses `vt-metadata.json` from the mounted vulnerability-test feed. The code checks both `<VT_PATH>/vt-metadata.json` and `<VT_PATH>/nasl/vt-metadata.json`. If the file is unavailable, malformed, or shaped unexpectedly, the workflow still returns raw results and marks enrichment as unavailable instead of faceplanting.
 
 One gotcha we hit: `openvasd` does not actually run scans by itself in this community-container setup. The Compose stack also needs `ospd-openvas` plus the shared scanner socket volume, otherwise scans get created and then stall with the very helpful classic of “OSPD socket ... does not exist.”
 

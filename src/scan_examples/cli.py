@@ -49,6 +49,10 @@ def _load_vt_index_for_cli(vt_path: str, progress: Callable[[str], None] | None 
         if progress is not None:
             progress(f"VT metadata file not found under {vt_path}; continuing without enrichment")
         return None
+    except (json.JSONDecodeError, ValueError) as exc:
+        if progress is not None:
+            progress(f"Failed to load VT metadata from {vt_path}: {exc}; continuing without enrichment")
+        return None
 
     if progress is not None:
         progress(f"Loaded VT metadata index from {metadata_path}")

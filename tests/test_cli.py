@@ -122,6 +122,42 @@ def test_cmd_results_emits_enriched_json(monkeypatch, capsys):
     assert payload["enriched_results"][0]["vt_metadata"]["name"] == "Example VT"
 
 
+def test_load_vt_index_for_cli_soft_fails_on_invalid_json(capsys):
+    messages: list[str] = []
+
+    def broken_loader(_vt_path):
+        raise json.JSONDecodeError("bad json", "{", 1)
+
+    original_loader = cli.load_vt_metadata_index
+    cli.load_vt_metadata_index = broken_loader
+    try:
+        assert cli._load_vt_index_for_cli("/tmp/vt", progress=messages.append) is None
+    finally:
+        cli.load_vt_metadata_index = original_loader
+
+    assert messages == [
+        "Failed to load VT metadata from /tmp/vt: bad json: line 1 column 2 (char 1); continuing without enrichment"
+    ]
+
+
+def test_load_vt_index_for_cli_soft_fails_on_invalid_shape():
+    messages: list[str] = []
+
+    def broken_loader(_vt_path):
+        raise ValueError("Unsupported VT metadata payload shape")
+
+    original_loader = cli.load_vt_metadata_index
+    cli.load_vt_metadata_index = broken_loader
+    try:
+        assert cli._load_vt_index_for_cli("/tmp/vt", progress=messages.append) is None
+    finally:
+        cli.load_vt_metadata_index = original_loader
+
+    assert messages == [
+        "Failed to load VT metadata from /tmp/vt: Unsupported VT metadata payload shape; continuing without enrichment"
+    ]
+
+
 def test_build_parser_rejects_negative_poll_interval():
     parser = build_parser()
 
