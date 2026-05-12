@@ -2,6 +2,10 @@
 
 Example code for using the OpenVAS scanner container REST API with the Greenbone community containers.
 
+## License
+
+MIT. See `LICENSE`.
+
 ## What is in this repo?
 
 - Python CLI example for the OpenVAS scanner REST API

@@ -7,6 +7,7 @@ name = "scan-examples"
 version = "0.1.0"
 description = "Python example code for the OpenVAS Scanner container REST API"
 readme = "README.md"
+license = {text = "MIT"}
 requires-python = ">=3.11"
 dependencies = [
   "requests>=2.32.0,<3",
