@@ -108,81 +108,78 @@ def run_lifecycle(
     wait_before_results: float = 10.0,
     create_retries: int = 12,
     create_retry_delay: float = 10.0,
-    progress: ProgressCallback | None = None,
     results_timeout: float = 300.0,
-    results_poll_interval: float = 10.0,
+    results_poll_interval: float = 15.0,
+    progress: ProgressCallback | None = None,
 ) -> E2EResult:
-    scan_id: str | None = None
     last_error: Exception | None = None
-    try:
-        for attempt in range(1, create_retries + 1):
-            _emit(progress, f"Creating scan (attempt {attempt}/{create_retries})")
-            try:
-                scan_id = client.create_scan(payload)
-                break
-            except (OpenVASAPIError, OSError) as exc:
-                last_error = exc
-                if attempt == create_retries:
-                    raise
-                _emit(progress, f"Create scan attempt {attempt} failed: {exc}")
-                time.sleep(create_retry_delay)
-        else:
-            raise RuntimeError(f"Failed to create scan after {create_retries} attempts: {last_error}")
+    for attempt in range(1, create_retries + 1):
+        _emit(progress, f"Creating scan (attempt {attempt}/{create_retries})")
+        try:
+            scan_id = client.create_scan(payload)
+            break
+        except (OpenVASAPIError, OSError) as exc:
+            last_error = exc
+            if attempt == create_retries:
+                raise
+            _emit(progress, f"Create scan attempt {attempt} failed: {exc}")
+            time.sleep(create_retry_delay)
+    else:
+        raise RuntimeError(f"Failed to create scan after {create_retries} attempts: {last_error}")
 
-        create_response = {"id": scan_id}
-        _emit(progress, f"Created scan {scan_id}")
+    create_response = {"id": scan_id}
+    _emit(progress, f"Created scan {scan_id}")
 
-        _emit(progress, f"Starting scan {scan_id}")
-        start_response = client.start_scan(scan_id)
+    _emit(progress, f"Starting scan {scan_id}")
+    start_response = client.start_scan(scan_id)
 
+    if wait_before_results > 0:
         _emit(progress, f"Initial wait {wait_before_results:g}s before polling for results")
         time.sleep(wait_before_results)
 
-        deadline = time.monotonic() + results_timeout
-        results: list[dict[str, Any]] = []
-        poll_count = 0
-        while True:
-            poll_count += 1
-            _emit(progress, f"Fetching results for {scan_id} (poll {poll_count})")
-            results = client.get_results(scan_id)
-            if results:
-                break
-            if time.monotonic() >= deadline:
-                raise RuntimeError(f"Timed out after {results_timeout}s waiting for findings for scan {scan_id}")
-            _emit(progress, f"No findings yet; waiting {results_poll_interval:g}s before retrying")
-            time.sleep(results_poll_interval)
+    deadline = time.monotonic() + max(results_timeout, 0)
+    attempts = 0
+    results: list[dict[str, Any]] = []
+    findings_seen = False
+    while True:
+        attempts += 1
+        _emit(progress, f"Fetching results for {scan_id} (poll {attempts})")
+        results = client.get_results(scan_id)
+        if results:
+            findings_seen = True
+            _emit(progress, f"Fetched {len(results)} findings")
+            break
 
-        findings_summary = summarize_results(results)
-        _emit(progress, f"Fetched {findings_summary['total']} findings")
+        now = time.monotonic()
+        if now >= deadline:
+            _emit(progress, f"No findings before timeout; stopping scan {scan_id}")
+            client.stop_scan(scan_id)
+            raise RuntimeError(
+                f"Timed out after {results_timeout:g}s waiting for findings for scan {scan_id}"
+            )
+        _emit(progress, f"No findings yet; waiting {results_poll_interval:g}s before retrying")
+        time.sleep(results_poll_interval)
 
+    findings_summary = summarize_results(results)
+
+    stop_response = None
+    if findings_seen:
         _emit(progress, f"Stopping scan {scan_id}")
         stop_response = client.stop_scan(scan_id)
 
-        _emit(progress, f"Deleting scan {scan_id}")
-        delete_response = client.delete_scan(scan_id)
-        _emit(progress, f"Deleted scan {scan_id}")
+    _emit(progress, f"Deleting scan {scan_id}")
+    delete_response = client.delete_scan(scan_id)
+    _emit(progress, f"Deleted scan {scan_id}")
 
-        return E2EResult(
-            scan_id=scan_id,
-            create_response=create_response,
-            start_response=start_response,
-            stop_response=stop_response,
-            results=results,
-            findings_summary=findings_summary,
-            delete_response=delete_response,
-        )
-    except Exception:
-        if scan_id:
-            _emit(progress, f"No findings before timeout; stopping scan {scan_id}")
-            try:
-                client.stop_scan(scan_id)
-            except Exception:
-                pass
-            try:
-                client.delete_scan(scan_id)
-            except Exception:
-                pass
-        raise
+    return E2EResult(
+        scan_id=scan_id,
+        create_response=create_response,
+        start_response=start_response,
+        stop_response=stop_response,
+        results=results,
+        findings_summary=findings_summary,
+        delete_response=delete_response,
+    )
 
 
 def dump_result(result: E2EResult) -> str:

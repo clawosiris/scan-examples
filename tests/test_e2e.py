@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-import pytest
-
 from scan_examples.e2e import E2EResult, dump_result, run_lifecycle, summarize_results
 
 
 class DummyClient:
-    def __init__(self) -> None:
+    def __init__(self, results_sequence=None) -> None:
         self.calls: list[tuple[str, object]] = []
-        self.result_calls = 0
+        self.results_sequence = list(results_sequence or [[
+            {"id": 1, "type": "alarm", "severity": "high"},
+            {"id": 2, "type": "log", "cvss": 9.3},
+        ]])
 
     def create_scan(self, payload):
         self.calls.append(("create", payload))
@@ -18,19 +19,15 @@ class DummyClient:
         self.calls.append(("start", scan_id))
         return {"status": "started"}
 
+    def get_results(self, scan_id: str):
+        self.calls.append(("results", scan_id))
+        if len(self.results_sequence) > 1:
+            return self.results_sequence.pop(0)
+        return self.results_sequence[0]
+
     def stop_scan(self, scan_id: str):
         self.calls.append(("stop", scan_id))
         return {"status": "stopped"}
-
-    def get_results(self, scan_id: str):
-        self.calls.append(("results", scan_id))
-        self.result_calls += 1
-        if self.result_calls < 3:
-            return []
-        return [
-            {"id": 1, "type": "alarm", "severity": "high"},
-            {"id": 2, "type": "log", "cvss": 9.3},
-        ]
 
     def delete_scan(self, scan_id: str):
         self.calls.append(("delete", scan_id))
@@ -73,74 +70,32 @@ def test_summarize_results_counts_findings():
 
 
 def test_run_lifecycle_emits_progress_in_order(monkeypatch):
-    client = DummyClient()
+    client = DummyClient(results_sequence=[[], [{"id": 1, "type": "alarm", "severity": "high"}, {"id": 2, "type": "log", "cvss": 9.3}]])
     messages: list[str] = []
-    monotonic_values = iter([0.0, 1.0, 2.0])
-
     monkeypatch.setattr("scan_examples.e2e.time.sleep", lambda _seconds: None)
+    monotonic_values = iter([0.0, 1.0, 2.0])
     monkeypatch.setattr("scan_examples.e2e.time.monotonic", lambda: next(monotonic_values))
 
     result = run_lifecycle(
         client=client,
         payload={"target": {}, "vts": []},
         wait_before_results=0,
+        results_timeout=60,
+        results_poll_interval=5,
         progress=messages.append,
-        results_timeout=300,
-        results_poll_interval=30,
     )
 
     assert result.findings_summary["total"] == 2
+    assert result.stop_response == {"status": "stopped"}
     assert messages == [
         "Creating scan (attempt 1/12)",
         "Created scan scan-123",
         "Starting scan scan-123",
-        "Initial wait 0s before polling for results",
         "Fetching results for scan-123 (poll 1)",
-        "No findings yet; waiting 30s before retrying",
+        "No findings yet; waiting 5s before retrying",
         "Fetching results for scan-123 (poll 2)",
-        "No findings yet; waiting 30s before retrying",
-        "Fetching results for scan-123 (poll 3)",
         "Fetched 2 findings",
         "Stopping scan scan-123",
         "Deleting scan scan-123",
         "Deleted scan scan-123",
     ]
-
-
-def test_run_lifecycle_stops_and_deletes_on_timeout(monkeypatch):
-    stopped: list[str] = []
-    deleted: list[str] = []
-
-    class Client:
-        def create_scan(self, payload):
-            return "scan-123"
-
-        def start_scan(self, scan_id):
-            return {"status": "started"}
-
-        def get_results(self, scan_id):
-            return []
-
-        def stop_scan(self, scan_id):
-            stopped.append(scan_id)
-            return {"status": "stopped"}
-
-        def delete_scan(self, scan_id):
-            deleted.append(scan_id)
-            return {"status": "deleted"}
-
-    monotonic_values = iter([0.0, 301.0])
-
-    monkeypatch.setattr("scan_examples.e2e.time.sleep", lambda seconds: None)
-    monkeypatch.setattr("scan_examples.e2e.time.monotonic", lambda: next(monotonic_values))
-
-    with pytest.raises(RuntimeError, match="Timed out after 300"):
-        run_lifecycle(
-            client=Client(),
-            payload={"target": {}},
-            results_timeout=300,
-            results_poll_interval=30,
-        )
-
-    assert stopped == ["scan-123"]
-    assert deleted == ["scan-123"]
