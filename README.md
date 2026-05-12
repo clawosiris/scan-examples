@@ -114,6 +114,8 @@ The repo includes `.github/workflows/tests.yml` with:
 
 That runner is intended to map to the dedicated Hetzner runner named `hetzner-vps-scan-examples`.
 
+The self-hosted e2e workflow intentionally keeps the named feed volumes (`vt_data_vol`, `notus_data_vol`, `data_objects_vol`, `gpg_data_vol`) between runs so Greenbone community feed data does not need to be re-fetched every time. Transient scanner state volumes are removed during teardown.
+
 ## Reference docs
 
 - `scan-docs.md`

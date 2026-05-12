@@ -47,6 +47,11 @@ jobs:
         with:
           name: scan-examples-e2e-artifacts
           path: artifacts/
-      - name: Tear down stack
+      - name: Tear down stack but keep feed volumes cached
         if: always()
-        run: docker compose down -v
+        run: |
+          docker compose down --remove-orphans
+          docker volume rm -f \
+            scan-examples_redis_socket_vol \
+            scan-examples_openvas_data_vol \
+            scan-examples_openvas_log_data_vol || true
