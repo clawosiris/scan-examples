@@ -112,16 +112,17 @@ def run_lifecycle(
     results_poll_interval: float = 15.0,
     progress: ProgressCallback | None = None,
 ) -> E2EResult:
-    if results_timeout < 0:
-        raise ValueError("results_timeout must be >= 0")
-    if results_poll_interval <= 0:
-        raise ValueError("results_poll_interval must be > 0")
+    wait_before_results = max(wait_before_results, 0)
+    create_retry_delay = max(create_retry_delay, 0)
+    results_timeout = max(results_timeout, 0)
+    results_poll_interval = max(results_poll_interval, 0)
 
     scan_id: str | None = None
     start_response: Any = None
     stop_response: Any = None
     delete_response: Any = None
     results: list[dict[str, Any]] = []
+    findings_summary: dict[str, Any] = {"total": 0, "by_severity": {}, "by_type": {}}
     last_error: Exception | None = None
     findings_seen = False
 
@@ -193,14 +194,17 @@ def run_lifecycle(
                 _emit(progress, f"No findings before timeout; stopping scan {scan_id}")
             if stop_response is None:
                 try:
+                    _emit(progress, f"Stopping scan {scan_id}")
                     stop_response = client.stop_scan(scan_id)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _emit(progress, f"Best-effort stop failed for {scan_id}: {exc}")
             if delete_response is None:
                 try:
+                    _emit(progress, f"Deleting scan {scan_id}")
                     delete_response = client.delete_scan(scan_id)
-                except Exception:
-                    pass
+                    _emit(progress, f"Deleted scan {scan_id}")
+                except Exception as exc:
+                    _emit(progress, f"Best-effort delete failed for {scan_id}: {exc}")
         raise
 
 

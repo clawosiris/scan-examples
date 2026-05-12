@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from scan_examples import cli
 from scan_examples.cli import build_parser
 
@@ -71,3 +73,29 @@ def test_cmd_e2e_logs_scanned_ports(monkeypatch, capsys, tmp_path):
     captured = capsys.readouterr()
     assert "[e2e] Scanning TCP ports: 22, 80, 445" in captured.err
     assert Path(output_path).read_text(encoding="utf-8") == '{"ok": true}\n'
+
+
+def test_build_parser_rejects_negative_poll_interval():
+    parser = build_parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args([
+            "e2e",
+            "--host",
+            "target",
+            "--results-poll-interval",
+            "-1",
+        ])
+
+
+def test_build_parser_rejects_negative_timeout():
+    parser = build_parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args([
+            "e2e",
+            "--host",
+            "target",
+            "--results-timeout",
+            "-1",
+        ])
