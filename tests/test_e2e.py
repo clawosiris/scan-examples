@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import pytest
+
 from scan_examples.e2e import E2EResult, dump_result, run_lifecycle, summarize_results
 
 
 class DummyClient:
-    def __init__(self) -> None:
+    def __init__(self, results_sequence=None) -> None:
         self.calls: list[tuple[str, object]] = []
+        self.results_sequence = list(results_sequence or [[
+            {"id": 1, "type": "alarm", "severity": "high"},
+            {"id": 2, "type": "log", "cvss": 9.3},
+        ]])
 
     def create_scan(self, payload):
         self.calls.append(("create", payload))
@@ -15,16 +21,15 @@ class DummyClient:
         self.calls.append(("start", scan_id))
         return {"status": "started"}
 
+    def get_results(self, scan_id: str):
+        self.calls.append(("results", scan_id))
+        if len(self.results_sequence) > 1:
+            return self.results_sequence.pop(0)
+        return self.results_sequence[0]
+
     def stop_scan(self, scan_id: str):
         self.calls.append(("stop", scan_id))
         return {"status": "stopped"}
-
-    def get_results(self, scan_id: str):
-        self.calls.append(("results", scan_id))
-        return [
-            {"id": 1, "type": "alarm", "severity": "high"},
-            {"id": 2, "type": "log", "cvss": 9.3},
-        ]
 
     def delete_scan(self, scan_id: str):
         self.calls.append(("delete", scan_id))
@@ -67,26 +72,90 @@ def test_summarize_results_counts_findings():
 
 
 def test_run_lifecycle_emits_progress_in_order(monkeypatch):
-    client = DummyClient()
+    client = DummyClient(results_sequence=[[], [{"id": 1, "type": "alarm", "severity": "high"}, {"id": 2, "type": "log", "cvss": 9.3}]])
     messages: list[str] = []
-    monkeypatch.setattr("scan_examples.e2e.time.sleep", lambda _seconds: None)
+    sleeps: list[float] = []
+    monkeypatch.setattr("scan_examples.e2e.time.sleep", lambda seconds: sleeps.append(seconds))
+    monotonic_values = iter([0.0, 1.0, 2.0])
+    monkeypatch.setattr("scan_examples.e2e.time.monotonic", lambda: next(monotonic_values))
 
     result = run_lifecycle(
         client=client,
         payload={"target": {}, "vts": []},
         wait_before_results=0,
+        results_timeout=60,
+        results_poll_interval=5,
         progress=messages.append,
     )
 
     assert result.findings_summary["total"] == 2
+    assert result.stop_response == {"status": "stopped"}
+    assert sleeps == [5]
     assert messages == [
         "Creating scan (attempt 1/12)",
         "Created scan scan-123",
         "Starting scan scan-123",
-        "Waiting 0s before collecting results",
-        "Stopping scan scan-123",
-        "Fetching results for scan-123",
+        "Fetching results for scan-123 (poll 1)",
+        "No findings yet; waiting 5s before retrying",
+        "Fetching results for scan-123 (poll 2)",
         "Fetched 2 findings",
+        "Stopping scan scan-123",
         "Deleting scan scan-123",
         "Deleted scan scan-123",
     ]
+
+
+def test_run_lifecycle_stops_and_deletes_on_timeout(monkeypatch):
+    class TimeoutClient(DummyClient):
+        def __init__(self) -> None:
+            super().__init__(results_sequence=[[]])
+
+    client = TimeoutClient()
+    messages: list[str] = []
+    monotonic_values = iter([0.0, 301.0])
+
+    monkeypatch.setattr("scan_examples.e2e.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr("scan_examples.e2e.time.monotonic", lambda: next(monotonic_values))
+
+    with pytest.raises(RuntimeError, match="Timed out after 300s waiting for findings"):
+        run_lifecycle(
+            client=client,
+            payload={"target": {}, "vts": []},
+            wait_before_results=0,
+            results_timeout=300,
+            results_poll_interval=30,
+            progress=messages.append,
+        )
+
+    assert client.calls == [
+        ("create", {"target": {}, "vts": []}),
+        ("start", "scan-123"),
+        ("results", "scan-123"),
+        ("stop", "scan-123"),
+        ("delete", "scan-123"),
+    ]
+    assert messages == [
+        "Creating scan (attempt 1/12)",
+        "Created scan scan-123",
+        "Starting scan scan-123",
+        "Fetching results for scan-123 (poll 1)",
+        "No findings before timeout; stopping scan scan-123",
+    ]
+
+
+def test_run_lifecycle_rejects_invalid_poll_interval():
+    with pytest.raises(ValueError, match="results_poll_interval must be > 0"):
+        run_lifecycle(
+            client=DummyClient(),
+            payload={"target": {}, "vts": []},
+            results_poll_interval=0,
+        )
+
+
+def test_run_lifecycle_rejects_negative_timeout():
+    with pytest.raises(ValueError, match="results_timeout must be >= 0"):
+        run_lifecycle(
+            client=DummyClient(),
+            payload={"target": {}, "vts": []},
+            results_timeout=-1,
+        )
