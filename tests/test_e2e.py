@@ -9,7 +9,7 @@ class DummyClient:
     def __init__(self, results_sequence=None) -> None:
         self.calls: list[tuple[str, object]] = []
         self.results_sequence = list(results_sequence or [[
-            {"id": 1, "type": "alarm", "severity": "high"},
+            {"id": 1, "oid": "1.2.3", "type": "alarm", "severity": "high"},
             {"id": 2, "type": "log", "cvss": 9.3},
         ]])
 
@@ -36,6 +36,19 @@ class DummyClient:
         return {"status": "deleted"}
 
 
+VT_INDEX = {
+    "1.2.3": {
+        "oid": "1.2.3",
+        "name": "Example VT",
+        "filename": "example.nasl",
+        "family": "General",
+        "category": "gather_info",
+        "references": [{"class": "cve", "id": "CVE-2026-0001"}],
+        "tag": {"summary": "Example summary"},
+    }
+}
+
+
 def test_dump_result_is_machine_readable():
     result = E2EResult(
         scan_id="scan-123",
@@ -43,6 +56,7 @@ def test_dump_result_is_machine_readable():
         start_response={"status": "started"},
         stop_response={"status": "stopped"},
         results=[{"id": 1, "type": "alarm"}],
+        enriched_results=[{"result": {"id": 1, "type": "alarm"}, "vt_metadata_status": "missing_oid", "vt_metadata": None}],
         findings_summary={"total": 1, "by_severity": {"unknown": 1}, "by_type": {"alarm": 1}},
         delete_response={"status": "deleted"},
     )
@@ -51,6 +65,7 @@ def test_dump_result_is_machine_readable():
 
     assert '"scan_id": "scan-123"' in rendered
     assert '"results": [' in rendered
+    assert '"enriched_results": [' in rendered
     assert '"findings_summary": {' in rendered
 
 
@@ -72,7 +87,7 @@ def test_summarize_results_counts_findings():
 
 
 def test_run_lifecycle_emits_progress_in_order(monkeypatch):
-    client = DummyClient(results_sequence=[[], [{"id": 1, "type": "alarm", "severity": "high"}, {"id": 2, "type": "log", "cvss": 9.3}]])
+    client = DummyClient(results_sequence=[[], [{"id": 1, "oid": "1.2.3", "type": "alarm", "severity": "high"}, {"id": 2, "type": "log", "cvss": 9.3}]])
     messages: list[str] = []
     sleeps: list[float] = []
     monkeypatch.setattr("scan_examples.e2e.time.sleep", lambda seconds: sleeps.append(seconds))
@@ -85,12 +100,15 @@ def test_run_lifecycle_emits_progress_in_order(monkeypatch):
         wait_before_results=0,
         results_timeout=60,
         results_poll_interval=5,
+        vt_index=VT_INDEX,
         progress=messages.append,
     )
 
     assert result.findings_summary["total"] == 2
     assert result.stop_response == {"status": "stopped"}
     assert result.delete_response == {"status": "deleted"}
+    assert result.enriched_results[0]["vt_metadata_status"] == "matched"
+    assert result.enriched_results[1]["vt_metadata_status"] == "missing_oid"
     assert sleeps == [5]
     assert messages == [
         "Creating scan (attempt 1/12)",

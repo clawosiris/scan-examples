@@ -35,7 +35,7 @@ Supported environment variables:
 - `SCANNER_API_URL` — scanner REST API base URL
 - `SCANNER_API_TIMEOUT` — HTTP timeout in seconds
 - `DATA_OBJECTS_PATH` — mounted community `data-objects` feed path
-- `VT_PATH` — mounted community `vulnerability-tests` feed path
+- `VT_PATH` — mounted community `vulnerability-tests` feed path (used for both NASL content and `vt-metadata.json` enrichment lookups)
 - `SCANNERCTL_BIN` — path to `scannerctl`
 - `TARGET_TCP_PORTS` — default comma-separated TCP ports for the target definition (defaults to `21,22,80,139,445,3306` for the bundled metasploitable target)
 - `WAIT_BEFORE_RESULTS` — initial delay before polling for scan results in the `e2e` flow
@@ -78,12 +78,15 @@ This command:
 3. Starts the scan
 4. Polls until findings appear in the results (or times out)
 5. Fetches results in JSON format
-6. Stops the scan cleanly after results are captured (or during timeout cleanup)
-7. Deletes the scan
+6. Enriches each result with matching VT metadata from `vt-metadata.json` when available
+7. Stops the scan cleanly after results are captured (or during timeout cleanup)
+8. Deletes the scan
 
-While it runs, the CLI now emits step-by-step progress logs to stderr (handy in CI), and the final result JSON includes a `findings_summary` block with the total number of findings plus grouped counts by severity and type.
+While it runs, the CLI now emits step-by-step progress logs to stderr (handy in CI), pretty-prints the enriched findings in the log, and writes final JSON that includes both raw `results` and `enriched_results` plus a `findings_summary` block with grouped counts by severity and type.
 
 The bundled target is `kirscht/metasploitable3-ub1404` with FTP, SSH, HTTP, SMB, and MySQL enabled. The default scanned TCP port set is `21,22,80,139,445,3306`, which gives the example a realistic multi-service target for local runs and CI.
+
+The enrichment step uses `vt-metadata.json` from the mounted vulnerability-test feed. The code checks both `<VT_PATH>/vt-metadata.json` and `<VT_PATH>/nasl/vt-metadata.json`. If the file is unavailable, the workflow still returns raw results and marks enrichment as unavailable instead of faceplanting.
 
 One gotcha we hit: `openvasd` does not actually run scans by itself in this community-container setup. The Compose stack also needs `ospd-openvas` plus the shared scanner socket volume, otherwise scans get created and then stall with the very helpful classic of “OSPD socket ... does not exist.”
 

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from .client import OpenVASAPIError, OpenVASScannerClient
+from .feed import enrich_results
 
 ProgressCallback = Callable[[str], None]
 
@@ -17,6 +18,7 @@ class E2EResult:
     start_response: Any
     stop_response: Any
     results: list[dict[str, Any]]
+    enriched_results: list[dict[str, Any]]
     findings_summary: dict[str, Any]
     delete_response: Any
 
@@ -27,6 +29,7 @@ class E2EResult:
             "start_response": self.start_response,
             "stop_response": self.stop_response,
             "results": self.results,
+            "enriched_results": self.enriched_results,
             "findings_summary": self.findings_summary,
             "delete_response": self.delete_response,
         }
@@ -110,6 +113,7 @@ def run_lifecycle(
     create_retry_delay: float = 10.0,
     results_timeout: float = 300.0,
     results_poll_interval: float = 15.0,
+    vt_index: dict[str, dict[str, Any]] | None = None,
     progress: ProgressCallback | None = None,
 ) -> E2EResult:
     wait_before_results = max(wait_before_results, 0)
@@ -171,6 +175,7 @@ def run_lifecycle(
             time.sleep(results_poll_interval)
 
         findings_summary = summarize_results(results)
+        enriched_results = enrich_results(results, vt_index)
 
         _emit(progress, f"Stopping scan {scan_id}")
         stop_response = client.stop_scan(scan_id)
@@ -185,6 +190,7 @@ def run_lifecycle(
             start_response=start_response,
             stop_response=stop_response,
             results=results,
+            enriched_results=enriched_results,
             findings_summary=findings_summary,
             delete_response=delete_response,
         )

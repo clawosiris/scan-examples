@@ -5,11 +5,12 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .client import OpenVASScannerClient
 from .conversion import convert_full_and_fast, discover_feed_layout
 from .e2e import dump_result, run_lifecycle
+from .feed import dump_pretty_enriched_results, enrich_results, load_vt_metadata_index
 
 
 def _non_negative_float(raw: str) -> float:
@@ -39,6 +40,19 @@ def _parse_ports(raw: str | None) -> list[int]:
     if not raw:
         return []
     return [int(part.strip()) for part in raw.split(",") if part.strip()]
+
+
+def _load_vt_index_for_cli(vt_path: str, progress: Callable[[str], None] | None = None) -> dict[str, dict[str, Any]] | None:
+    try:
+        metadata_path, vt_index = load_vt_metadata_index(vt_path)
+    except FileNotFoundError:
+        if progress is not None:
+            progress(f"VT metadata file not found under {vt_path}; continuing without enrichment")
+        return None
+
+    if progress is not None:
+        progress(f"Loaded VT metadata index from {metadata_path}")
+    return vt_index
 
 
 def cmd_convert(args: argparse.Namespace) -> int:
@@ -75,7 +89,16 @@ def cmd_stop(args: argparse.Namespace) -> int:
 
 def cmd_results(args: argparse.Namespace) -> int:
     client = _build_client(args)
-    _dump_json({"scan_id": args.scan_id, "results": client.get_results(args.scan_id)}, args.output)
+    results = client.get_results(args.scan_id)
+    vt_index = _load_vt_index_for_cli(args.vt_path)
+    _dump_json(
+        {
+            "scan_id": args.scan_id,
+            "results": results,
+            "enriched_results": enrich_results(results, vt_index),
+        },
+        args.output,
+    )
     return 0
 
 
@@ -96,6 +119,7 @@ def cmd_e2e(args: argparse.Namespace) -> int:
     progress(f"Scanning TCP ports: {ports_rendered}")
     progress("Discovering Greenbone community feed layout")
     layout = discover_feed_layout(args.data_objects_path, args.vt_path)
+    vt_index = _load_vt_index_for_cli(args.vt_path, progress=progress)
     progress("Converting Full & Fast configuration with scannerctl")
     payload = convert_full_and_fast(
         layout=layout,
@@ -112,9 +136,11 @@ def cmd_e2e(args: argparse.Namespace) -> int:
         create_retry_delay=args.create_retry_delay,
         results_timeout=args.results_timeout,
         results_poll_interval=args.results_poll_interval,
+        vt_index=vt_index,
         progress=progress,
     )
     progress(f"Findings summary: {json.dumps(result.findings_summary, sort_keys=True)}")
+    progress(f"Enriched findings:\n{dump_pretty_enriched_results(result.enriched_results)}")
     rendered = dump_result(result)
     if args.output:
         Path(args.output).write_text(rendered + "\n", encoding="utf-8")
@@ -147,17 +173,20 @@ def build_parser() -> argparse.ArgumentParser:
         )
         command.add_argument("--output", help="Write JSON output to a file")
 
+    def add_vt_path_flag(command: argparse.ArgumentParser) -> None:
+        command.add_argument(
+            "--vt-path",
+            default=os.environ.get("VT_PATH", "/feed/vulnerability-tests"),
+            help="Path to the Greenbone VT feed",
+        )
+
     def add_shared_feed_flags(command: argparse.ArgumentParser, *, include_output: bool = True) -> None:
         command.add_argument(
             "--data-objects-path",
             default=os.environ.get("DATA_OBJECTS_PATH", "/feed/data-objects"),
             help="Path to the Greenbone data-objects feed",
         )
-        command.add_argument(
-            "--vt-path",
-            default=os.environ.get("VT_PATH", "/feed/vulnerability-tests"),
-            help="Path to the Greenbone VT feed",
-        )
+        add_vt_path_flag(command)
         command.add_argument(
             "--scannerctl-bin",
             default=os.environ.get("SCANNERCTL_BIN", "scannerctl"),
@@ -200,6 +229,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     results = subparsers.add_parser("get-results", help="Fetch scan results")
     add_shared_api_flags(results)
+    add_vt_path_flag(results)
     results.add_argument("scan_id")
     results.set_defaults(func=cmd_results)
 
