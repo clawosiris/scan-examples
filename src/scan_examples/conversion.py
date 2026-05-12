@@ -71,7 +71,10 @@ def convert_full_and_fast(
     scannerctl_bin: str = "scannerctl",
 ) -> dict[str, Any]:
     scan_config = _first_existing(layout.data_objects_path, FULL_AND_FAST_FILENAMES)
-    portlist = _first_existing(layout.data_objects_path, OPENVAS_DEFAULT_PORTLIST_FILENAMES)
+    try:
+        portlist = _first_existing(layout.data_objects_path, OPENVAS_DEFAULT_PORTLIST_FILENAMES)
+    except FileNotFoundError:
+        portlist = None
     base_payload = build_target_payload(hosts, tcp_ports=tcp_ports)
 
     command = [
@@ -80,10 +83,10 @@ def convert_full_and_fast(
         "-i",
         "-p",
         str(layout.vt_path),
-        "-l",
-        str(portlist),
-        str(scan_config),
     ]
+    if portlist is not None:
+        command.extend(["-l", str(portlist)])
+    command.append(str(scan_config))
 
     result = subprocess.run(
         command,

@@ -60,3 +60,40 @@ def test_convert_full_and_fast_invokes_scannerctl(tmp_path, monkeypatch):
     assert payload["vts"] == [{"oid": "1.2.3"}]
     assert captured["command"][0] == "scannerctl"
     assert captured["input"]["target"]["hosts"] == ["example"]
+    assert "-l" in captured["command"]
+
+
+def test_convert_full_and_fast_skips_missing_portlist(tmp_path, monkeypatch):
+    data_objects = tmp_path / "data-objects"
+    vt_path = tmp_path / "vulnerability-tests"
+    scan_configs = data_objects / "scan-configs"
+    scan_configs.mkdir(parents=True)
+    vt_path.mkdir(parents=True)
+
+    (scan_configs / "full-and-fast-daba56c8-73ec-11df-a475-002264764cea.xml").write_text("scan-config")
+
+    captured = {}
+
+    class Result:
+        returncode = 0
+        stdout = json.dumps({"target": {"hosts": ["example"]}, "vts": [{"oid": "1.2.3"}]})
+        stderr = ""
+
+    def fake_run(command, input, text, capture_output, check):
+        captured["command"] = command
+        captured["input"] = json.loads(input)
+        return Result()
+
+    monkeypatch.setattr("scan_examples.conversion.subprocess.run", fake_run)
+
+    payload = convert_full_and_fast(
+        layout=discover_feed_layout(data_objects, vt_path),
+        hosts=["example"],
+        tcp_ports=[80],
+        scannerctl_bin="scannerctl",
+    )
+
+    assert payload["vts"] == [{"oid": "1.2.3"}]
+    assert captured["command"][0] == "scannerctl"
+    assert "-l" not in captured["command"]
+    assert captured["input"]["target"]["ports"][0]["range"] == [{"start": 80}]
