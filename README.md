@@ -14,7 +14,7 @@ MIT. See `LICENSE`.
 - Docker Compose environment with:
   - Greenbone community feed containers
   - `openvasd` REST API
-  - a lightweight HTTP target container for end-to-end scans
+  - a `kirscht/metasploitable3-ub1404` target container for end-to-end scans
 - Unit tests and a self-hosted GitHub Actions workflow for end-to-end validation
 
 ## Configuration
@@ -37,7 +37,7 @@ Supported environment variables:
 - `DATA_OBJECTS_PATH` — mounted community `data-objects` feed path
 - `VT_PATH` — mounted community `vulnerability-tests` feed path
 - `SCANNERCTL_BIN` — path to `scannerctl`
-- `TARGET_TCP_PORTS` — default comma-separated TCP ports for the target definition
+- `TARGET_TCP_PORTS` — default comma-separated TCP ports for the target definition (defaults to `21,22,80,139,445,3306` for the bundled metasploitable target)
 - `WAIT_BEFORE_RESULTS` — delay between start and stop/results in the `e2e` flow
 - `CREATE_SCAN_RETRIES` / `CREATE_SCAN_RETRY_DELAY` — API warm-up retry controls for scan creation
 
@@ -68,7 +68,7 @@ openvas-example delete-scan <scan-id>
 ### Run the end-to-end flow
 
 ```bash
-openvas-example e2e --host target --tcp-ports 80
+openvas-example e2e --host target --tcp-ports 21,22,80,139,445,3306
 ```
 
 This command:
@@ -81,6 +81,8 @@ This command:
 
 While it runs, the CLI now emits step-by-step progress logs to stderr (handy in CI), and the final result JSON includes a `findings_summary` block with the total number of findings plus grouped counts by severity and type.
 
+The bundled target is `kirscht/metasploitable3-ub1404` with FTP, SSH, HTTP, SMB, and MySQL enabled. The default scanned TCP port set is `21,22,80,139,445,3306`, which gives the example a realistic multi-service target without turning the test into an all-day hostage situation.
+
 ## Compose-based test environment
 
 Start the scanner stack and target:
@@ -92,7 +94,7 @@ docker compose up -d vulnerability-tests notus-data data-objects gpg-data redis-
 Run the example container against that stack:
 
 ```bash
-docker compose run --rm example e2e --host target --tcp-ports 80
+docker compose run --rm example e2e --host target --tcp-ports 21,22,80,139,445,3306
 ```
 
 ## Local development with uv

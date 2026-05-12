@@ -20,3 +20,15 @@ def test_build_parser_supports_e2e_command():
     assert args.host == ["target"]
     assert args.output == "result.json"
     assert args.create_retries == 3
+
+
+def test_build_parser_uses_metasploitable_port_defaults():
+    parser = build_parser()
+
+    args = parser.parse_args([
+        "e2e",
+        "--host",
+        "target",
+    ])
+
+    assert args.tcp_ports == "21,22,80,139,445,3306"

@@ -158,7 +158,7 @@ def build_parser() -> argparse.ArgumentParser:
         )
         command.add_argument(
             "--tcp-ports",
-            default=os.environ.get("TARGET_TCP_PORTS", "80"),
+            default=os.environ.get("TARGET_TCP_PORTS", "21,22,80,139,445,3306"),
             help="Comma-separated list of TCP ports for the example target",
         )
         if include_output:

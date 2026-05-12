@@ -37,7 +37,7 @@ jobs:
       - name: Start community scanner stack and target
         run: docker compose up -d vulnerability-tests notus-data data-objects gpg-data redis-server configure-openvas openvasd target
       - name: Run end-to-end lifecycle test
-        run: docker compose run --rm -v "$PWD/artifacts:/artifacts" example e2e --host target --tcp-ports 80 --wait-before-results 30 --output /artifacts/scan-results.json
+        run: docker compose run --rm -v "$PWD/artifacts:/artifacts" example e2e --host target --tcp-ports 21,22,80,139,445,3306 --wait-before-results 45 --output /artifacts/scan-results.json
       - name: Collect compose logs
         if: always()
         run: docker compose logs --no-color > artifacts/docker-compose.log

@@ -73,13 +73,21 @@ services:
         condition: service_completed_successfully
 
   target:
-    image: nginx:alpine
+    image: kirscht/metasploitable3-ub1404:latest
     hostname: target
+    entrypoint: /entrypoint.sh
+    environment:
+      FTP: "yes"
+      HTTP: "yes"
+      SMB: "yes"
+      SQL: "yes"
+      SSH: "yes"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/ || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
+      test: ["CMD", "bash", "-lc", ": >/dev/tcp/127.0.0.1/22 && : >/dev/tcp/127.0.0.1/80 && : >/dev/tcp/127.0.0.1/3306"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
 
   example:
     build: .
@@ -87,7 +95,7 @@ services:
       SCANNER_API_URL: http://openvasd:80
       DATA_OBJECTS_PATH: /feed/data-objects
       VT_PATH: /feed/vulnerability-tests
-      TARGET_TCP_PORTS: 80
+      TARGET_TCP_PORTS: 21,22,80,139,445,3306
     volumes:
       - data_objects_vol:/feed/data-objects:ro
       - vt_data_vol:/feed/vulnerability-tests:ro
