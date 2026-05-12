@@ -75,6 +75,8 @@ This command:
 5. Fetches results in JSON format
 6. Deletes the scan
 
+While it runs, the CLI now emits step-by-step progress logs to stderr (handy in CI), and the final result JSON includes a `findings_summary` block with the total number of findings plus grouped counts by severity and type.
+
 ## Compose-based test environment
 
 Start the scanner stack and target:

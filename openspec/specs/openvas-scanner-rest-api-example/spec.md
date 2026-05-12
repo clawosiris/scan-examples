@@ -77,8 +77,10 @@ The repository SHALL include an end-to-end test that exercises the documented wo
 - **GIVEN** the compose environment is running
 - **WHEN** the e2e test executes
 - **THEN** it performs Full & Fast configuration conversion
+- **AND** logs the major lifecycle steps in a human-readable way while the workflow is running
 - **AND** creates, starts, stops, retrieves results for, and deletes a scan
 - **AND** writes the lifecycle result payload in a stable machine-readable JSON format for automation and debugging
+- **AND** includes summary stats for the number of findings returned by the scan
 - **AND** fails if any lifecycle step cannot be completed.
 
 ### Requirement: GitHub Actions workflow for validation

@@ -80,7 +80,12 @@ def cmd_delete(args: argparse.Namespace) -> int:
 
 
 def cmd_e2e(args: argparse.Namespace) -> int:
+    def progress(message: str) -> None:
+        print(f"[e2e] {message}", file=sys.stderr, flush=True)
+
+    progress("Discovering Greenbone community feed layout")
     layout = discover_feed_layout(args.data_objects_path, args.vt_path)
+    progress("Converting Full & Fast configuration with scannerctl")
     payload = convert_full_and_fast(
         layout=layout,
         hosts=args.host,
@@ -94,10 +99,13 @@ def cmd_e2e(args: argparse.Namespace) -> int:
         wait_before_results=args.wait_before_results,
         create_retries=args.create_retries,
         create_retry_delay=args.create_retry_delay,
+        progress=progress,
     )
+    progress(f"Findings summary: {json.dumps(result.findings_summary, sort_keys=True)}")
     rendered = dump_result(result)
     if args.output:
         Path(args.output).write_text(rendered + "\n", encoding="utf-8")
+        progress(f"Wrote e2e result payload to {args.output}")
     else:
         print(rendered)
     return 0
