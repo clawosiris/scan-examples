@@ -97,7 +97,7 @@ services:
       - gpg_data_vol:/etc/openvas/gnupg
       - vt_data_vol:/var/lib/openvas/plugins
       - notus_data_vol:/var/lib/notus
-      - ospd_openvas_socket_vol:/run/ospd
+      - ospd_openvas_socket_vol:/var/run/ospd
       - redis_socket_vol:/run/redis/
       - openvas_data_vol:/etc/openvas/
       - openvas_log_data_vol:/var/log/openvas

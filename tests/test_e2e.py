@@ -74,7 +74,8 @@ def test_summarize_results_counts_findings():
 def test_run_lifecycle_emits_progress_in_order(monkeypatch):
     client = DummyClient(results_sequence=[[], [{"id": 1, "type": "alarm", "severity": "high"}, {"id": 2, "type": "log", "cvss": 9.3}]])
     messages: list[str] = []
-    monkeypatch.setattr("scan_examples.e2e.time.sleep", lambda _seconds: None)
+    sleeps: list[float] = []
+    monkeypatch.setattr("scan_examples.e2e.time.sleep", lambda seconds: sleeps.append(seconds))
     monotonic_values = iter([0.0, 1.0, 2.0])
     monkeypatch.setattr("scan_examples.e2e.time.monotonic", lambda: next(monotonic_values))
 
@@ -90,6 +91,7 @@ def test_run_lifecycle_emits_progress_in_order(monkeypatch):
     assert result.findings_summary["total"] == 2
     assert result.stop_response == {"status": "stopped"}
     assert result.delete_response == {"status": "deleted"}
+    assert sleeps == [5]
     assert messages == [
         "Creating scan (attempt 1/12)",
         "Created scan scan-123",
@@ -104,20 +106,20 @@ def test_run_lifecycle_emits_progress_in_order(monkeypatch):
     ]
 
 
-def test_run_lifecycle_cleans_up_after_timeout(monkeypatch):
+def test_run_lifecycle_stops_and_deletes_on_timeout(monkeypatch):
     client = DummyClient(results_sequence=[[]])
     messages: list[str] = []
     monkeypatch.setattr("scan_examples.e2e.time.sleep", lambda _seconds: None)
-    monotonic_values = iter([0.0, 0.0])
+    monotonic_values = iter([0.0, 301.0])
     monkeypatch.setattr("scan_examples.e2e.time.monotonic", lambda: next(monotonic_values))
 
-    with pytest.raises(RuntimeError, match=r"Timed out after 0s waiting for findings"):
+    with pytest.raises(RuntimeError, match="Timed out after 300s waiting for findings"):
         run_lifecycle(
             client=client,
             payload={"target": {}, "vts": []},
             wait_before_results=0,
-            results_timeout=0,
-            results_poll_interval=5,
+            results_timeout=300,
+            results_poll_interval=30,
             progress=messages.append,
         )
 
