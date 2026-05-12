@@ -7,7 +7,7 @@ The repository SHALL provide runnable Python example code that demonstrates use 
 - **GIVEN** a user follows this repository to run the example
 - **WHEN** they inspect the example entrypoint and configuration
 - **THEN** the example identifies the community scanner container setup as the supported environment
-- **AND** documents any required endpoints, certificates, and environment variables.
+- **AND** documents any required endpoints, certificates, environment variables, and the default target TCP port used by the bundled e2e flow.
 
 ### Requirement: Full & Fast configuration conversion
 The repository SHALL provide a reproducible way to convert the community feed's **Full & Fast** scan configuration into the JSON payload format expected by the scanner REST API using `scannerctl`.
@@ -68,6 +68,7 @@ The repository SHALL provide a Docker Compose based environment for validating t
 - **WHEN** the compose stack starts
 - **THEN** it includes the community scanner/feed setup
 - **AND** a lightweight HTTP target container as the scan target
+- **AND** the default bundled scan target definition points at TCP port 80 for that HTTP service
 - **AND** any supporting services required for the example and test flow.
 
 ### Requirement: End-to-end test coverage
@@ -82,6 +83,15 @@ The repository SHALL include an end-to-end test that exercises the documented wo
 - **AND** writes the lifecycle result payload in a stable machine-readable JSON format for automation and debugging
 - **AND** includes summary stats for the number of findings returned by the scan
 - **AND** fails if any lifecycle step cannot be completed.
+
+### Requirement: Repository licensing
+The repository SHALL declare a permissive license suitable for both proprietary and open-source reuse of the example code.
+
+#### Scenario: Repository publishes MIT license
+- **GIVEN** a consumer evaluates whether the example code can be reused
+- **WHEN** they inspect the repository metadata and top-level files
+- **THEN** the repository includes an MIT `LICENSE` file
+- **AND** the README and package metadata identify the project as MIT-licensed.
 
 ### Requirement: GitHub Actions workflow for validation
 The repository SHALL provide a GitHub Actions workflow that validates the example in CI.

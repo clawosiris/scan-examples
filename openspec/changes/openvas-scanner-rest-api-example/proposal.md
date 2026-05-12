@@ -17,7 +17,7 @@ Without that example, consumers must translate documentation into implementation
 - Add a Docker image for running the example code consistently.
 - Add a Docker Compose based end-to-end environment using:
   - community scanner/feed setup
-  - a target metasploitable container
+  - a lightweight HTTP target container on TCP port 80
   - any supporting services required to run the example and tests
 - Add an end-to-end test that executes the above lifecycle in the composed environment.
 - Add a GitHub Actions workflow that builds the environment and runs the end-to-end test.
