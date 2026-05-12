@@ -1,0 +1,75 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any
+
+import requests
+
+
+class OpenVASAPIError(RuntimeError):
+    """Raised when the scanner API returns an error response."""
+
+
+@dataclass(slots=True)
+class OpenVASScannerClient:
+    base_url: str
+    timeout: float = 30.0
+    verify_tls: bool = True
+    session: requests.Session = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self.base_url = self.base_url.rstrip("/")
+        self.session = requests.Session()
+
+    def _request(self, method: str, path: str, **kwargs: Any) -> Any:
+        response = self.session.request(
+            method,
+            f"{self.base_url}{path}",
+            timeout=self.timeout,
+            verify=self.verify_tls,
+            **kwargs,
+        )
+        if response.status_code >= 400:
+            raise OpenVASAPIError(
+                f"{method} {path} failed with {response.status_code}: {response.text.strip()}"
+            )
+        if not response.content:
+            return None
+        content_type = response.headers.get("content-type", "")
+        if "application/json" in content_type:
+            return response.json()
+        try:
+            return response.json()
+        except ValueError:
+            return response.text
+
+    def create_scan(self, payload: dict[str, Any]) -> str:
+        data = self._request("POST", "/scans", json=payload)
+        if isinstance(data, str) and data:
+            return data
+        if isinstance(data, dict):
+            for key in ("id", "scan_id", "scanId"):
+                value = data.get(key)
+                if isinstance(value, str) and value:
+                    return value
+        raise OpenVASAPIError(f"Create scan did not return a scan id: {data!r}")
+
+    def scan_action(self, scan_id: str, action: str) -> Any:
+        return self._request("POST", f"/scans/{scan_id}", json={"action": action})
+
+    def start_scan(self, scan_id: str) -> Any:
+        return self.scan_action(scan_id, "start")
+
+    def stop_scan(self, scan_id: str) -> Any:
+        return self.scan_action(scan_id, "stop")
+
+    def get_results(self, scan_id: str) -> list[dict[str, Any]]:
+        data = self._request("GET", f"/scans/{scan_id}/results")
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict) and isinstance(data.get("results"), list):
+            return data["results"]
+        raise OpenVASAPIError(f"Unexpected results payload: {data!r}")
+
+    def delete_scan(self, scan_id: str) -> Any:
+        return self._request("DELETE", f"/scans/{scan_id}")

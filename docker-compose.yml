@@ -1,0 +1,109 @@
+name: scan-examples
+
+services:
+  vulnerability-tests:
+    image: registry.community.greenbone.net/community/vulnerability-tests
+    environment:
+      FEED_RELEASE: "24.10"
+      KEEP_ALIVE: 1
+    volumes:
+      - vt_data_vol:/mnt
+
+  notus-data:
+    image: registry.community.greenbone.net/community/notus-data
+    environment:
+      KEEP_ALIVE: 1
+    volumes:
+      - notus_data_vol:/mnt
+
+  data-objects:
+    image: registry.community.greenbone.net/community/data-objects
+    environment:
+      FEED_RELEASE: "24.10"
+      KEEP_ALIVE: 1
+    volumes:
+      - data_objects_vol:/mnt
+
+  gpg-data:
+    image: registry.community.greenbone.net/community/gpg-data
+    volumes:
+      - gpg_data_vol:/mnt
+
+  redis-server:
+    image: registry.community.greenbone.net/community/redis-server
+    volumes:
+      - redis_socket_vol:/run/redis/
+
+  configure-openvas:
+    image: registry.community.greenbone.net/community/openvas-scanner:stable
+    volumes:
+      - openvas_data_vol:/mnt
+      - openvas_log_data_vol:/var/log/openvas
+    command:
+      - /bin/sh
+      - -c
+      - |
+        printf "table_driven_lsc = yes\nopenvasd_server = http://openvasd:80\n" > /mnt/openvas.conf
+        sed "s/127/128/" /etc/openvas/openvas_log.conf | sed 's/gvm/openvas/' > /mnt/openvas_log.conf
+        chmod 644 /mnt/openvas.conf /mnt/openvas_log.conf
+        touch /var/log/openvas/openvas.log
+        chmod 666 /var/log/openvas/openvas.log
+
+  openvasd:
+    image: registry.community.greenbone.net/community/openvas-scanner:stable
+    environment:
+      GNUPGHOME: /etc/openvas/gnupg
+      LISTENING: 0.0.0.0:80
+    ports:
+      - "3000:80"
+    volumes:
+      - openvas_data_vol:/etc/openvas
+      - openvas_log_data_vol:/var/log/openvas
+      - gpg_data_vol:/etc/openvas/gnupg
+      - notus_data_vol:/var/lib/notus
+      - vt_data_vol:/var/lib/openvas/plugins
+    depends_on:
+      vulnerability-tests:
+        condition: service_healthy
+      notus-data:
+        condition: service_healthy
+      configure-openvas:
+        condition: service_completed_successfully
+      gpg-data:
+        condition: service_completed_successfully
+
+  target:
+    image: nginx:alpine
+    hostname: target
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  example:
+    build: .
+    environment:
+      SCANNER_API_URL: http://openvasd:80
+      DATA_OBJECTS_PATH: /feed/data-objects
+      VT_PATH: /feed/vulnerability-tests
+      TARGET_TCP_PORTS: 80
+    volumes:
+      - data_objects_vol:/feed/data-objects:ro
+      - vt_data_vol:/feed/vulnerability-tests:ro
+    depends_on:
+      openvasd:
+        condition: service_started
+      data-objects:
+        condition: service_healthy
+      target:
+        condition: service_healthy
+
+volumes:
+  gpg_data_vol:
+  data_objects_vol:
+  vt_data_vol:
+  notus_data_vol:
+  redis_socket_vol:
+  openvas_data_vol:
+  openvas_log_data_vol:

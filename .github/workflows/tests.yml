@@ -1,0 +1,57 @@
+name: tests
+
+on:
+  push:
+    branches: [main, devel]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.11'
+          enable-cache: true
+      - name: Sync package + test deps
+        run: uv sync --locked --extra dev
+      - name: Run unit tests
+        run: uv run pytest
+
+  e2e:
+    needs: unit
+    runs-on: [self-hosted, Linux, X64, hetzner-vps-scan-examples, scan-examples-e2e]
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show Docker environment
+        run: |
+          docker --version
+          docker compose version
+      - name: Create artifact directory
+        run: mkdir -p artifacts
+      - name: Build fresh example service image
+        run: docker compose build --pull example
+      - name: Start community scanner stack and target
+        run: docker compose up -d vulnerability-tests notus-data data-objects gpg-data redis-server configure-openvas openvasd target
+      - name: Run end-to-end lifecycle test
+        run: docker compose run --rm -v "$PWD/artifacts:/artifacts" example e2e --host target --tcp-ports 80 --wait-before-results 30 --output /artifacts/scan-results.json
+      - name: Collect compose logs
+        if: always()
+        run: docker compose logs --no-color > artifacts/docker-compose.log
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scan-examples-e2e-artifacts
+          path: artifacts/
+      - name: Tear down stack but keep feed volumes cached
+        if: always()
+        run: |
+          docker compose down --remove-orphans
+          docker volume rm -f \
+            scan-examples_redis_socket_vol \
+            scan-examples_openvas_data_vol \
+            scan-examples_openvas_log_data_vol || true
