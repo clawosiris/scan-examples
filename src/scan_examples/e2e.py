@@ -108,6 +108,8 @@ def run_lifecycle(
     wait_before_results: float = 10.0,
     create_retries: int = 12,
     create_retry_delay: float = 10.0,
+    results_timeout: float = 300.0,
+    results_poll_interval: float = 15.0,
     progress: ProgressCallback | None = None,
 ) -> E2EResult:
     last_error: Exception | None = None
@@ -131,16 +133,28 @@ def run_lifecycle(
     _emit(progress, f"Starting scan {scan_id}")
     start_response = client.start_scan(scan_id)
 
-    _emit(progress, f"Waiting {wait_before_results:g}s before collecting results")
-    time.sleep(wait_before_results)
+    if wait_before_results > 0:
+        _emit(progress, f"Initial wait {wait_before_results:g}s before polling for results")
+        time.sleep(wait_before_results)
 
-    _emit(progress, f"Stopping scan {scan_id}")
-    stop_response = client.stop_scan(scan_id)
+    deadline = time.monotonic() + max(results_timeout, 0)
+    attempts = 0
+    results: list[dict[str, Any]] = []
+    while True:
+        attempts += 1
+        _emit(progress, f"Fetching results for {scan_id} (poll {attempts})")
+        results = client.get_results(scan_id)
+        if results:
+            _emit(progress, f"Fetched {len(results)} findings")
+            break
+        if time.monotonic() >= deadline:
+            raise RuntimeError(
+                f"Timed out after {results_timeout:g}s waiting for findings for scan {scan_id}"
+            )
+        _emit(progress, f"No findings yet; waiting {results_poll_interval:g}s before retrying")
+        time.sleep(results_poll_interval)
 
-    _emit(progress, f"Fetching results for {scan_id}")
-    results = client.get_results(scan_id)
     findings_summary = summarize_results(results)
-    _emit(progress, f"Fetched {findings_summary['total']} findings")
 
     _emit(progress, f"Deleting scan {scan_id}")
     delete_response = client.delete_scan(scan_id)
@@ -150,7 +164,7 @@ def run_lifecycle(
         scan_id=scan_id,
         create_response=create_response,
         start_response=start_response,
-        stop_response=stop_response,
+        stop_response=None,
         results=results,
         findings_summary=findings_summary,
         delete_response=delete_response,

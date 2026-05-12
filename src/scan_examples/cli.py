@@ -103,6 +103,8 @@ def cmd_e2e(args: argparse.Namespace) -> int:
         wait_before_results=args.wait_before_results,
         create_retries=args.create_retries,
         create_retry_delay=args.create_retry_delay,
+        results_timeout=args.results_timeout,
+        results_poll_interval=args.results_poll_interval,
         progress=progress,
     )
     progress(f"Findings summary: {json.dumps(result.findings_summary, sort_keys=True)}")
@@ -206,7 +208,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--wait-before-results",
         type=float,
         default=float(os.environ.get("WAIT_BEFORE_RESULTS", "10")),
-        help="Seconds to wait between start and stop/results calls",
+        help="Initial seconds to wait before polling for scan results",
     )
     e2e.add_argument(
         "--create-retries",
@@ -219,6 +221,18 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=float(os.environ.get("CREATE_SCAN_RETRY_DELAY", "10")),
         help="Seconds to wait between scan creation retries",
+    )
+    e2e.add_argument(
+        "--results-timeout",
+        type=float,
+        default=float(os.environ.get("RESULTS_TIMEOUT", "300")),
+        help="Maximum seconds to wait for findings to appear",
+    )
+    e2e.add_argument(
+        "--results-poll-interval",
+        type=float,
+        default=float(os.environ.get("RESULTS_POLL_INTERVAL", "15")),
+        help="Seconds to wait between results polls",
     )
     e2e.set_defaults(func=cmd_e2e)
 

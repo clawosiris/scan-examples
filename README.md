@@ -38,7 +38,8 @@ Supported environment variables:
 - `VT_PATH` — mounted community `vulnerability-tests` feed path
 - `SCANNERCTL_BIN` — path to `scannerctl`
 - `TARGET_TCP_PORTS` — default comma-separated TCP ports for the target definition (defaults to `21,22,80,139,445,3306` for the bundled metasploitable target)
-- `WAIT_BEFORE_RESULTS` — delay between start and stop/results in the `e2e` flow
+- `WAIT_BEFORE_RESULTS` — initial delay before polling for scan results in the `e2e` flow
+- `RESULTS_TIMEOUT` / `RESULTS_POLL_INTERVAL` — controls for waiting until findings appear
 - `CREATE_SCAN_RETRIES` / `CREATE_SCAN_RETRY_DELAY` — API warm-up retry controls for scan creation
 
 ## CLI commands
@@ -76,8 +77,9 @@ This command:
 2. Retries scan creation while `openvasd` is still warming up
 3. Starts the scan
 4. Stops the scan after a short wait
-5. Fetches results in JSON format
-6. Deletes the scan
+5. Polls until findings appear in the results (or times out)
+6. Fetches results in JSON format
+7. Deletes the scan
 
 While it runs, the CLI now emits step-by-step progress logs to stderr (handy in CI), and the final result JSON includes a `findings_summary` block with the total number of findings plus grouped counts by severity and type.
 

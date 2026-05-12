@@ -4,8 +4,12 @@ from scan_examples.e2e import E2EResult, dump_result, run_lifecycle, summarize_r
 
 
 class DummyClient:
-    def __init__(self) -> None:
+    def __init__(self, results_sequence=None) -> None:
         self.calls: list[tuple[str, object]] = []
+        self.results_sequence = list(results_sequence or [[
+            {"id": 1, "type": "alarm", "severity": "high"},
+            {"id": 2, "type": "log", "cvss": 9.3},
+        ]])
 
     def create_scan(self, payload):
         self.calls.append(("create", payload))
@@ -15,16 +19,11 @@ class DummyClient:
         self.calls.append(("start", scan_id))
         return {"status": "started"}
 
-    def stop_scan(self, scan_id: str):
-        self.calls.append(("stop", scan_id))
-        return {"status": "stopped"}
-
     def get_results(self, scan_id: str):
         self.calls.append(("results", scan_id))
-        return [
-            {"id": 1, "type": "alarm", "severity": "high"},
-            {"id": 2, "type": "log", "cvss": 9.3},
-        ]
+        if len(self.results_sequence) > 1:
+            return self.results_sequence.pop(0)
+        return self.results_sequence[0]
 
     def delete_scan(self, scan_id: str):
         self.calls.append(("delete", scan_id))
@@ -67,14 +66,18 @@ def test_summarize_results_counts_findings():
 
 
 def test_run_lifecycle_emits_progress_in_order(monkeypatch):
-    client = DummyClient()
+    client = DummyClient(results_sequence=[[], [{"id": 1, "type": "alarm", "severity": "high"}, {"id": 2, "type": "log", "cvss": 9.3}]])
     messages: list[str] = []
     monkeypatch.setattr("scan_examples.e2e.time.sleep", lambda _seconds: None)
+    monotonic_values = iter([0.0, 1.0, 2.0])
+    monkeypatch.setattr("scan_examples.e2e.time.monotonic", lambda: next(monotonic_values))
 
     result = run_lifecycle(
         client=client,
         payload={"target": {}, "vts": []},
         wait_before_results=0,
+        results_timeout=60,
+        results_poll_interval=5,
         progress=messages.append,
     )
 
@@ -83,9 +86,9 @@ def test_run_lifecycle_emits_progress_in_order(monkeypatch):
         "Creating scan (attempt 1/12)",
         "Created scan scan-123",
         "Starting scan scan-123",
-        "Waiting 0s before collecting results",
-        "Stopping scan scan-123",
-        "Fetching results for scan-123",
+        "Fetching results for scan-123 (poll 1)",
+        "No findings yet; waiting 5s before retrying",
+        "Fetching results for scan-123 (poll 2)",
         "Fetched 2 findings",
         "Deleting scan scan-123",
         "Deleted scan scan-123",

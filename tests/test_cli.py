@@ -23,6 +23,8 @@ def test_build_parser_supports_e2e_command():
     assert args.host == ["target"]
     assert args.output == "result.json"
     assert args.create_retries == 3
+    assert args.results_timeout == 300
+    assert args.results_poll_interval == 15
 
 
 def test_build_parser_uses_metasploitable_port_defaults():
