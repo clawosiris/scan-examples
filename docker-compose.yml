@@ -73,8 +73,13 @@ services:
         condition: service_completed_successfully
 
   target:
-    image: kirscht/metasploitable3-ub1404:latest
+    image: nginx:alpine
     hostname: target
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   example:
     build: .
@@ -90,7 +95,7 @@ services:
       openvasd:
         condition: service_started
       target:
-        condition: service_started
+        condition: service_healthy
 
 volumes:
   gpg_data_vol:

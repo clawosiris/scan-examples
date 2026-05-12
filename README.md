@@ -10,7 +10,7 @@ Example code for using the OpenVAS scanner container REST API with the Greenbone
 - Docker Compose environment with:
   - Greenbone community feed containers
   - `openvasd` REST API
-  - a metasploitable target container
+  - a lightweight HTTP target container for end-to-end scans
 - Unit tests and a self-hosted GitHub Actions workflow for end-to-end validation
 
 ## Configuration
@@ -64,7 +64,7 @@ openvas-example delete-scan <scan-id>
 ### Run the end-to-end flow
 
 ```bash
-openvas-example e2e --host target --tcp-ports 22,80,443
+openvas-example e2e --host target --tcp-ports 80
 ```
 
 This command:
@@ -86,7 +86,7 @@ docker compose up -d vulnerability-tests notus-data data-objects gpg-data redis-
 Run the example container against that stack:
 
 ```bash
-docker compose run --rm example e2e --host target --tcp-ports 22,80,443
+docker compose run --rm example e2e --host target --tcp-ports 80
 ```
 
 ## GitHub Actions
