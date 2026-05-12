@@ -16,7 +16,7 @@ RUN apt-get update \
 WORKDIR /app
 
 RUN git clone --depth 1 https://github.com/greenbone/openvas-scanner.git /tmp/openvas-scanner \
-    && cargo install --locked --path /tmp/openvas-scanner/rust/src/scannerctl --root /usr/local \
+    && cargo install --locked --path /tmp/openvas-scanner/rust --bin scannerctl --root /usr/local \
     && rm -rf /tmp/openvas-scanner /root/.cargo/registry /root/.cargo/git
 
 COPY pyproject.toml README.md scan-docs.md ./
