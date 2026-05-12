@@ -32,8 +32,8 @@ jobs:
           docker compose version
       - name: Create artifact directory
         run: mkdir -p artifacts
-      - name: Build example image
-        run: docker build -t scan-examples:ci .
+      - name: Build fresh example service image
+        run: docker compose build --pull example
       - name: Start community scanner stack and target
         run: docker compose up -d vulnerability-tests notus-data data-objects gpg-data redis-server configure-openvas openvasd target
       - name: Run end-to-end lifecycle test
