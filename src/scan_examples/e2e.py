@@ -112,6 +112,11 @@ def run_lifecycle(
     results_poll_interval: float = 15.0,
     progress: ProgressCallback | None = None,
 ) -> E2EResult:
+    wait_before_results = max(wait_before_results, 0)
+    create_retry_delay = max(create_retry_delay, 0)
+    results_timeout = max(results_timeout, 0)
+    results_poll_interval = max(results_poll_interval, 0)
+
     last_error: Exception | None = None
     for attempt in range(1, create_retries + 1):
         _emit(progress, f"Creating scan (attempt {attempt}/{create_retries})")
@@ -133,43 +138,64 @@ def run_lifecycle(
     _emit(progress, f"Starting scan {scan_id}")
     start_response = client.start_scan(scan_id)
 
-    if wait_before_results > 0:
-        _emit(progress, f"Initial wait {wait_before_results:g}s before polling for results")
-        time.sleep(wait_before_results)
-
-    deadline = time.monotonic() + max(results_timeout, 0)
-    attempts = 0
     results: list[dict[str, Any]] = []
-    findings_seen = False
-    while True:
-        attempts += 1
-        _emit(progress, f"Fetching results for {scan_id} (poll {attempts})")
-        results = client.get_results(scan_id)
-        if results:
-            findings_seen = True
-            _emit(progress, f"Fetched {len(results)} findings")
-            break
-
-        now = time.monotonic()
-        if now >= deadline:
-            _emit(progress, f"No findings before timeout; stopping scan {scan_id}")
-            client.stop_scan(scan_id)
-            raise RuntimeError(
-                f"Timed out after {results_timeout:g}s waiting for findings for scan {scan_id}"
-            )
-        _emit(progress, f"No findings yet; waiting {results_poll_interval:g}s before retrying")
-        time.sleep(results_poll_interval)
-
-    findings_summary = summarize_results(results)
-
+    findings_summary: dict[str, Any] = {"total": 0, "by_severity": {}, "by_type": {}}
     stop_response = None
-    if findings_seen:
-        _emit(progress, f"Stopping scan {scan_id}")
-        stop_response = client.stop_scan(scan_id)
+    delete_response = None
+    cleanup_error: Exception | None = None
+    primary_error: Exception | None = None
 
-    _emit(progress, f"Deleting scan {scan_id}")
-    delete_response = client.delete_scan(scan_id)
-    _emit(progress, f"Deleted scan {scan_id}")
+    try:
+        if wait_before_results > 0:
+            _emit(progress, f"Initial wait {wait_before_results:g}s before polling for results")
+            time.sleep(wait_before_results)
+
+        deadline = time.monotonic() + results_timeout
+        attempts = 0
+        while True:
+            attempts += 1
+            _emit(progress, f"Fetching results for {scan_id} (poll {attempts})")
+            results = client.get_results(scan_id)
+            if results:
+                _emit(progress, f"Fetched {len(results)} findings")
+                break
+
+            now = time.monotonic()
+            if now >= deadline:
+                raise RuntimeError(
+                    f"Timed out after {results_timeout:g}s waiting for findings for scan {scan_id}"
+                )
+            _emit(progress, f"No findings yet; waiting {results_poll_interval:g}s before retrying")
+            time.sleep(results_poll_interval)
+
+        findings_summary = summarize_results(results)
+    except Exception as exc:
+        primary_error = exc
+        if isinstance(exc, RuntimeError) and str(exc).startswith("Timed out after"):
+            _emit(progress, f"No findings before timeout; stopping scan {scan_id}")
+        raise
+    finally:
+        _emit(progress, f"Stopping scan {scan_id}")
+        try:
+            stop_response = client.stop_scan(scan_id)
+        except Exception as exc:
+            if primary_error is None:
+                cleanup_error = exc
+            else:
+                _emit(progress, f"Best-effort stop failed for {scan_id}: {exc}")
+
+        _emit(progress, f"Deleting scan {scan_id}")
+        try:
+            delete_response = client.delete_scan(scan_id)
+            _emit(progress, f"Deleted scan {scan_id}")
+        except Exception as exc:
+            if primary_error is None and cleanup_error is None:
+                cleanup_error = exc
+            else:
+                _emit(progress, f"Best-effort delete failed for {scan_id}: {exc}")
+
+        if cleanup_error is not None:
+            raise cleanup_error
 
     return E2EResult(
         scan_id=scan_id,

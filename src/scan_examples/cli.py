@@ -12,6 +12,13 @@ from .conversion import convert_full_and_fast, discover_feed_layout
 from .e2e import dump_result, run_lifecycle
 
 
+def _non_negative_float(raw: str) -> float:
+    value = float(raw)
+    if value < 0:
+        raise argparse.ArgumentTypeError("must be >= 0")
+    return value
+
+
 def _build_client(args: argparse.Namespace) -> OpenVASScannerClient:
     return OpenVASScannerClient(
         base_url=args.base_url,
@@ -206,8 +213,8 @@ def build_parser() -> argparse.ArgumentParser:
     add_shared_feed_flags(e2e, include_output=False)
     e2e.add_argument(
         "--wait-before-results",
-        type=float,
-        default=float(os.environ.get("WAIT_BEFORE_RESULTS", "10")),
+        type=_non_negative_float,
+        default=_non_negative_float(os.environ.get("WAIT_BEFORE_RESULTS", "10")),
         help="Initial seconds to wait before polling for scan results",
     )
     e2e.add_argument(
@@ -218,20 +225,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     e2e.add_argument(
         "--create-retry-delay",
-        type=float,
-        default=float(os.environ.get("CREATE_SCAN_RETRY_DELAY", "10")),
+        type=_non_negative_float,
+        default=_non_negative_float(os.environ.get("CREATE_SCAN_RETRY_DELAY", "10")),
         help="Seconds to wait between scan creation retries",
     )
     e2e.add_argument(
         "--results-timeout",
-        type=float,
-        default=float(os.environ.get("RESULTS_TIMEOUT", "300")),
+        type=_non_negative_float,
+        default=_non_negative_float(os.environ.get("RESULTS_TIMEOUT", "300")),
         help="Maximum seconds to wait for findings to appear",
     )
     e2e.add_argument(
         "--results-poll-interval",
-        type=float,
-        default=float(os.environ.get("RESULTS_POLL_INTERVAL", "15")),
+        type=_non_negative_float,
+        default=_non_negative_float(os.environ.get("RESULTS_POLL_INTERVAL", "15")),
         help="Seconds to wait between results polls",
     )
     e2e.set_defaults(func=cmd_e2e)
