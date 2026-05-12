@@ -7,7 +7,8 @@ The repository SHALL provide runnable Python example code that demonstrates use 
 - **GIVEN** a user follows this repository to run the example
 - **WHEN** they inspect the example entrypoint and configuration
 - **THEN** the example identifies the community scanner container setup as the supported environment
-- **AND** documents any required endpoints, certificates, environment variables, and the default target TCP port used by the bundled e2e flow.
+- **AND** documents the required endpoints, feed mounts, environment variables, and default target TCP port set used by the bundled e2e flow
+- **AND** explains the `ospd-openvas` dependency needed for scans to start successfully in the community container stack.
 
 ### Requirement: Full & Fast configuration conversion
 The repository SHALL provide a reproducible way to convert the community feed's **Full & Fast** scan configuration into the JSON payload format expected by the scanner REST API using `scannerctl`.
@@ -19,7 +20,7 @@ The repository SHALL provide a reproducible way to convert the community feed's 
 - **AND** the conversion step is documented or scripted so users do not need to reverse-engineer it.
 
 ### Requirement: Scan lifecycle example coverage
-The Python example SHALL cover the documented scan lifecycle operations for the scanner REST API.
+The Python example SHALL cover the documented scan lifecycle operations for the scanner REST API and make long-running scans observable enough for local runs and CI debugging.
 
 #### Scenario: Create a scan
 - **GIVEN** a reachable scanner API and converted Full & Fast configuration
@@ -43,6 +44,7 @@ The Python example SHALL cover the documented scan lifecycle operations for the 
 - **GIVEN** a created scan identifier
 - **WHEN** the example fetches results
 - **THEN** it requests scan results from the scanner API
+- **AND** retries result polling until findings appear or a configured timeout is reached
 - **AND** exposes returned results in a stable machine-readable format for automation and tests.
 
 #### Scenario: Delete a scan
@@ -67,8 +69,9 @@ The repository SHALL provide a Docker Compose based environment for validating t
 - **GIVEN** a developer or CI runner launches the repository's e2e environment
 - **WHEN** the compose stack starts
 - **THEN** it includes the community scanner/feed setup
-- **AND** a lightweight HTTP target container as the scan target
-- **AND** the default bundled scan target definition points at TCP port 80 for that HTTP service
+- **AND** an `ospd-openvas` service with the scanner socket wiring required by `openvasd`
+- **AND** a `kirscht/metasploitable3-ub1404` multi-service target container as the scan target
+- **AND** the default bundled scan target definition points at TCP ports `21,22,80,139,445,3306`
 - **AND** any supporting services required for the example and test flow.
 
 ### Requirement: End-to-end test coverage
@@ -79,7 +82,8 @@ The repository SHALL include an end-to-end test that exercises the documented wo
 - **WHEN** the e2e test executes
 - **THEN** it performs Full & Fast configuration conversion
 - **AND** logs the major lifecycle steps in a human-readable way while the workflow is running
-- **AND** creates, starts, stops, retrieves results for, and deletes a scan
+- **AND** creates, starts, retrieves results for, stops, and deletes a scan
+- **AND** waits for findings to appear before ending the scan or failing on timeout
 - **AND** writes the lifecycle result payload in a stable machine-readable JSON format for automation and debugging
 - **AND** includes summary stats for the number of findings returned by the scan
 - **AND** fails if any lifecycle step cannot be completed.

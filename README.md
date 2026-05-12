@@ -13,7 +13,7 @@ MIT. See `LICENSE`.
 - Docker image for the example CLI
 - Docker Compose environment with:
   - Greenbone community feed containers
-  - `openvasd` REST API
+  - `openvasd` REST API plus the required `ospd-openvas` scanner service/socket wiring
   - a `kirscht/metasploitable3-ub1404` target container for end-to-end scans
 - Unit tests and a self-hosted GitHub Actions workflow for end-to-end validation
 
@@ -76,23 +76,23 @@ This command:
 1. Resolves the mounted feed layout and converts the feed's **Full & Fast** scan config with `scannerctl`
 2. Retries scan creation while `openvasd` is still warming up
 3. Starts the scan
-4. Stops the scan after a short wait
-5. Polls until findings appear in the results (or times out)
-6. Fetches results in JSON format
+4. Polls until findings appear in the results (or times out)
+5. Fetches results in JSON format
+6. Stops the scan cleanly after results are captured (or during timeout cleanup)
 7. Deletes the scan
 
 While it runs, the CLI now emits step-by-step progress logs to stderr (handy in CI), and the final result JSON includes a `findings_summary` block with the total number of findings plus grouped counts by severity and type.
 
-The bundled target is `kirscht/metasploitable3-ub1404` with FTP, SSH, HTTP, SMB, and MySQL enabled. The default scanned TCP port set is `21,22,80,139,445,3306`, which gives the example a realistic multi-service target for local runs.
+The bundled target is `kirscht/metasploitable3-ub1404` with FTP, SSH, HTTP, SMB, and MySQL enabled. The default scanned TCP port set is `21,22,80,139,445,3306`, which gives the example a realistic multi-service target for local runs and CI.
 
-CI uses a faster smoke path against port `80` only so the end-to-end job proves the scanner pipeline can return findings without turning every push into a hostage negotiation.
+One gotcha we hit: `openvasd` does not actually run scans by itself in this community-container setup. The Compose stack also needs `ospd-openvas` plus the shared scanner socket volume, otherwise scans get created and then stall with the very helpful classic of “OSPD socket ... does not exist.”
 
 ## Compose-based test environment
 
 Start the scanner stack and target:
 
 ```bash
-docker compose up -d vulnerability-tests notus-data data-objects gpg-data redis-server configure-openvas openvasd target
+docker compose up -d vulnerability-tests notus-data data-objects gpg-data redis-server configure-openvas ospd-openvas openvasd target
 ```
 
 Run the example container against that stack:
