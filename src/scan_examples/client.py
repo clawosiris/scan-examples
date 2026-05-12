@@ -45,6 +45,8 @@ class OpenVASScannerClient:
 
     def create_scan(self, payload: dict[str, Any]) -> str:
         data = self._request("POST", "/scans", json=payload)
+        if isinstance(data, str) and data:
+            return data
         if isinstance(data, dict):
             for key in ("id", "scan_id", "scanId"):
                 value = data.get(key)

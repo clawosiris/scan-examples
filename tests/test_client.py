@@ -40,6 +40,14 @@ def test_create_scan_returns_id():
     assert client.create_scan({"target": {}, "vts": []}) == "scan-123"
 
 
+
+def test_create_scan_accepts_raw_string_id():
+    client = OpenVASScannerClient("http://scanner")
+    client.session = DummySession([make_response(payload="scan-123")])
+
+    assert client.create_scan({"target": {}, "vts": []}) == "scan-123"
+
+
 def test_get_results_accepts_wrapped_results():
     client = OpenVASScannerClient("http://scanner")
     client.session = DummySession([make_response(payload={"results": [{"id": 1}]})])
