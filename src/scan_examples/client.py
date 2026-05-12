@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import requests
@@ -15,6 +15,7 @@ class OpenVASScannerClient:
     base_url: str
     timeout: float = 30.0
     verify_tls: bool = True
+    session: requests.Session = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         self.base_url = self.base_url.rstrip("/")
