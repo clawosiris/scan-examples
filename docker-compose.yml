@@ -62,6 +62,7 @@ services:
       - gpg_data_vol:/etc/openvas/gnupg
       - notus_data_vol:/var/lib/notus
       - vt_data_vol:/var/lib/openvas/plugins
+      - ospd_openvas_socket_vol:/var/run/ospd
     depends_on:
       vulnerability-tests:
         condition: service_healthy
@@ -71,6 +72,46 @@ services:
         condition: service_completed_successfully
       gpg-data:
         condition: service_completed_successfully
+      ospd-openvas:
+        condition: service_started
+
+  ospd-openvas:
+    image: registry.community.greenbone.net/community/ospd-openvas:stable
+    hostname: ospd-openvas.local
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    security_opt:
+      - seccomp=unconfined
+      - apparmor=unconfined
+    command:
+      - ospd-openvas
+      - -f
+      - --config
+      - /etc/gvm/ospd-openvas.conf
+      - --notus-feed-dir
+      - /var/lib/notus/advisories
+      - -m
+      - "666"
+    volumes:
+      - gpg_data_vol:/etc/openvas/gnupg
+      - vt_data_vol:/var/lib/openvas/plugins
+      - notus_data_vol:/var/lib/notus
+      - ospd_openvas_socket_vol:/run/ospd
+      - redis_socket_vol:/run/redis/
+      - openvas_data_vol:/etc/openvas/
+      - openvas_log_data_vol:/var/log/openvas
+    depends_on:
+      redis-server:
+        condition: service_started
+      gpg-data:
+        condition: service_completed_successfully
+      configure-openvas:
+        condition: service_completed_successfully
+      vulnerability-tests:
+        condition: service_healthy
+      notus-data:
+        condition: service_healthy
 
   target:
     image: kirscht/metasploitable3-ub1404:latest
@@ -112,6 +153,7 @@ volumes:
   data_objects_vol:
   vt_data_vol:
   notus_data_vol:
+  ospd_openvas_socket_vol:
   redis_socket_vol:
   openvas_data_vol:
   openvas_log_data_vol:
