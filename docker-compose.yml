@@ -23,16 +23,6 @@ services:
       KEEP_ALIVE: 1
     volumes:
       - data_objects_vol:/mnt
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "find /mnt -type f \\( -name 'full-and-fast-daba56c8-73ec-11df-a475-002264764cea.xml' -o -name 'full-and-fast.xml' \\) | grep -q . && find /mnt -type f \\( -name 'openvas-default-c7e03b6c-3bbe-11e1-a057-406186ea4fc5.xml' -o -name 'openvas-default.xml' \\) | grep -q .",
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 20s
 
   gpg-data:
     image: registry.community.greenbone.net/community/gpg-data
