@@ -83,7 +83,9 @@ This command:
 
 While it runs, the CLI now emits step-by-step progress logs to stderr (handy in CI), and the final result JSON includes a `findings_summary` block with the total number of findings plus grouped counts by severity and type.
 
-The bundled target is `kirscht/metasploitable3-ub1404` with FTP, SSH, HTTP, SMB, and MySQL enabled. The default scanned TCP port set is `21,22,80,139,445,3306`, which gives the example a realistic multi-service target without turning the test into an all-day hostage situation.
+The bundled target is `kirscht/metasploitable3-ub1404` with FTP, SSH, HTTP, SMB, and MySQL enabled. The default scanned TCP port set is `21,22,80,139,445,3306`, which gives the example a realistic multi-service target for local runs.
+
+CI uses a faster smoke path against port `80` only so the end-to-end job proves the scanner pipeline can return findings without turning every push into a hostage negotiation.
 
 ## Compose-based test environment
 
