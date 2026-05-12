@@ -25,7 +25,11 @@ RUN set -eux; \
 FROM python:3.11-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/app/.venv \
+    PATH="/app/.venv/bin:$PATH"
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -35,10 +39,11 @@ RUN apt-get update \
 WORKDIR /app
 
 COPY --from=scannerctl-fetcher /usr/local/bin/scannerctl /usr/local/bin/scannerctl
-COPY pyproject.toml README.md scan-docs.md ./
+COPY --from=ghcr.io/astral-sh/uv:0.11.3 /uv /uvx /bin/
+COPY pyproject.toml uv.lock README.md scan-docs.md ./
 COPY src ./src
 
-RUN pip install --no-cache-dir .
+RUN uv sync --locked --no-dev --no-editable
 
 ENTRYPOINT ["openvas-example"]
 CMD ["--help"]
