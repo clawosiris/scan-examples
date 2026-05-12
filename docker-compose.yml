@@ -56,6 +56,12 @@ services:
       LISTENING: 0.0.0.0:80
     ports:
       - "3000:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost/health/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
     volumes:
       - openvas_data_vol:/etc/openvas
       - openvas_log_data_vol:/var/log/openvas
@@ -73,13 +79,14 @@ services:
         condition: service_completed_successfully
 
   target:
-    image: nginx:alpine
+    image: docker.io/kirscht/metasploitable3-ub1404:latest
     hostname: target
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/ || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
+      test: ["CMD-SHELL", "nc -z localhost 22 && nc -z localhost 80 && nc -z localhost 445"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
 
   example:
     build: .
@@ -87,13 +94,13 @@ services:
       SCANNER_API_URL: http://openvasd:80
       DATA_OBJECTS_PATH: /feed/data-objects
       VT_PATH: /feed/vulnerability-tests
-      TARGET_TCP_PORTS: 80
+      TARGET_TCP_PORTS: 21,22,80,139,445,3306
     volumes:
       - data_objects_vol:/feed/data-objects:ro
       - vt_data_vol:/feed/vulnerability-tests:ro
     depends_on:
       openvasd:
-        condition: service_started
+        condition: service_healthy
       data-objects:
         condition: service_healthy
       target:

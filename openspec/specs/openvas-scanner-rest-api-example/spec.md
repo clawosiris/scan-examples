@@ -67,8 +67,7 @@ The repository SHALL provide a Docker Compose based environment for validating t
 - **GIVEN** a developer or CI runner launches the repository's e2e environment
 - **WHEN** the compose stack starts
 - **THEN** it includes the community scanner/feed setup
-- **AND** a lightweight HTTP target container as the scan target
-- **AND** the default bundled scan target definition points at TCP port 80 for that HTTP service
+- **AND** a metasploitable container as the scan target
 - **AND** any supporting services required for the example and test flow.
 
 ### Requirement: End-to-end test coverage
@@ -76,13 +75,14 @@ The repository SHALL include an end-to-end test that exercises the documented wo
 
 #### Scenario: e2e test runs lifecycle workflow
 - **GIVEN** the compose environment is running
-- **WHEN** the e2e test executes
+- **WHEN** the e2e test executes against the bundled metasploitable target
 - **THEN** it performs Full & Fast configuration conversion
 - **AND** logs the major lifecycle steps in a human-readable way while the workflow is running
-- **AND** creates, starts, stops, retrieves results for, and deletes a scan
+- **AND** targets a reasonable multi-service TCP port set including SSH and common exposed services
+- **AND** creates, starts, waits for findings from, stops, retrieves results for, and deletes a scan
 - **AND** writes the lifecycle result payload in a stable machine-readable JSON format for automation and debugging
 - **AND** includes summary stats for the number of findings returned by the scan
-- **AND** fails if any lifecycle step cannot be completed.
+- **AND** fails if any lifecycle step cannot be completed or findings do not arrive before the configured timeout.
 
 ### Requirement: Repository licensing
 The repository SHALL declare a permissive license suitable for both proprietary and open-source reuse of the example code.
@@ -101,5 +101,6 @@ The repository SHALL provide a GitHub Actions workflow that validates the exampl
 - **WHEN** the GitHub Actions workflow runs
 - **THEN** it builds the example container
 - **AND** starts the Docker Compose test environment
-- **AND** runs the e2e test
+- **AND** waits for the scanner readiness endpoint before launching the example workflow
+- **AND** runs the e2e test against the bundled metasploitable target and documented port set
 - **AND** preserves logs or artifacts sufficient to debug failures.

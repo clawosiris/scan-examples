@@ -14,7 +14,7 @@ MIT. See `LICENSE`.
 - Docker Compose environment with:
   - Greenbone community feed containers
   - `openvasd` REST API
-  - a lightweight HTTP target container for end-to-end scans
+  - a metasploitable target container for end-to-end scans
 - Unit tests and a self-hosted GitHub Actions workflow for end-to-end validation
 
 ## Configuration
@@ -37,9 +37,10 @@ Supported environment variables:
 - `DATA_OBJECTS_PATH` — mounted community `data-objects` feed path
 - `VT_PATH` — mounted community `vulnerability-tests` feed path
 - `SCANNERCTL_BIN` — path to `scannerctl`
-- `TARGET_TCP_PORTS` — default comma-separated TCP ports for the target definition
-- `WAIT_BEFORE_RESULTS` — delay between start and stop/results in the `e2e` flow
+- `TARGET_TCP_PORTS` — default comma-separated TCP ports for the target definition (`21,22,80,139,445,3306` in the bundled metasploitable setup)
+- `WAIT_BEFORE_RESULTS` — delay before polling for findings in the `e2e` flow
 - `CREATE_SCAN_RETRIES` / `CREATE_SCAN_RETRY_DELAY` — API warm-up retry controls for scan creation
+- `RESULTS_TIMEOUT` / `RESULTS_POLL_INTERVAL` — controls for waiting on scan findings during `e2e`
 
 ## CLI commands
 
@@ -68,16 +69,17 @@ openvas-example delete-scan <scan-id>
 ### Run the end-to-end flow
 
 ```bash
-openvas-example e2e --host target --tcp-ports 80
+openvas-example e2e --host target --tcp-ports 21,22,80,139,445,3306
 ```
 
 This command:
 1. Resolves the mounted feed layout and converts the feed's **Full & Fast** scan config with `scannerctl`
 2. Retries scan creation while `openvasd` is still warming up
 3. Starts the scan
-4. Stops the scan after a short wait
-5. Fetches results in JSON format
-6. Deletes the scan
+4. Waits briefly, then polls until findings arrive or the results timeout is hit
+5. Stops the scan after findings are available
+6. Fetches results in JSON format
+7. Deletes the scan
 
 While it runs, the CLI now emits step-by-step progress logs to stderr (handy in CI), and the final result JSON includes a `findings_summary` block with the total number of findings plus grouped counts by severity and type.
 
@@ -89,10 +91,11 @@ Start the scanner stack and target:
 docker compose up -d vulnerability-tests notus-data data-objects gpg-data redis-server configure-openvas openvasd target
 ```
 
-Run the example container against that stack:
+Run the example container against that stack after the scanner API is ready:
 
 ```bash
-docker compose run --rm example e2e --host target --tcp-ports 80
+until docker compose exec -T openvasd wget -q --spider http://localhost/health/ready; do sleep 10; done
+docker compose run --rm example e2e --host target --tcp-ports 21,22,80,139,445,3306 --wait-before-results 45 --results-timeout 3600 --results-poll-interval 30
 ```
 
 ## Local development with uv
@@ -120,7 +123,7 @@ The repo includes `.github/workflows/tests.yml` with:
 
 That runner is intended to map to the dedicated Hetzner runner named `hetzner-vps-scan-examples`.
 
-The self-hosted e2e workflow intentionally keeps the named feed volumes (`vt_data_vol`, `notus_data_vol`, `data_objects_vol`, `gpg_data_vol`) between runs so Greenbone community feed data does not need to be re-fetched every time. Transient scanner state volumes are removed during teardown.
+The self-hosted e2e workflow intentionally keeps the named feed volumes (`vt_data_vol`, `notus_data_vol`, `data_objects_vol`, `gpg_data_vol`) between runs so Greenbone community feed data does not need to be re-fetched every time. It waits for `openvasd` readiness via `/health/ready` before launching the example, scans the bundled metasploitable target across `21,22,80,139,445,3306`, polls for findings for up to one hour, and removes transient scanner state volumes during teardown.
 
 ## Reference docs
 

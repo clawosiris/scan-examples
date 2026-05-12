@@ -100,6 +100,8 @@ def cmd_e2e(args: argparse.Namespace) -> int:
         create_retries=args.create_retries,
         create_retry_delay=args.create_retry_delay,
         progress=progress,
+        results_timeout=args.results_timeout,
+        results_poll_interval=args.results_poll_interval,
     )
     progress(f"Findings summary: {json.dumps(result.findings_summary, sort_keys=True)}")
     rendered = dump_result(result)
@@ -158,7 +160,7 @@ def build_parser() -> argparse.ArgumentParser:
         )
         command.add_argument(
             "--tcp-ports",
-            default=os.environ.get("TARGET_TCP_PORTS", "80"),
+            default=os.environ.get("TARGET_TCP_PORTS", "21,22,80,139,445,3306"),
             help="Comma-separated list of TCP ports for the example target",
         )
         if include_output:
@@ -215,6 +217,18 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=float(os.environ.get("CREATE_SCAN_RETRY_DELAY", "10")),
         help="Seconds to wait between scan creation retries",
+    )
+    e2e.add_argument(
+        "--results-timeout",
+        type=float,
+        default=float(os.environ.get("RESULTS_TIMEOUT", "300")),
+        help="Maximum seconds to wait for scan findings before failing",
+    )
+    e2e.add_argument(
+        "--results-poll-interval",
+        type=float,
+        default=float(os.environ.get("RESULTS_POLL_INTERVAL", "10")),
+        help="Seconds to wait between result polling attempts",
     )
     e2e.set_defaults(func=cmd_e2e)
 
