@@ -12,9 +12,9 @@
 
 ## 3. End-to-end validation
 
-- [x] 3.1 Add Docker Compose fixtures for the community scanner environment and a metasploitable target.
+- [x] 3.1 Add Docker Compose fixtures for the community scanner environment and a lightweight HTTP target container.
 - [x] 3.2 Add an e2e test that converts the Full & Fast config and exercises create, start, stop, results, and delete.
-- [x] 3.3 Make the e2e test assert that results are returned in a stable, machine-checkable format.
+- [x] 3.3 Make the example workflow emit results in a stable, machine-checkable JSON format and cover that format in tests.
 
 ## 4. CI automation
 

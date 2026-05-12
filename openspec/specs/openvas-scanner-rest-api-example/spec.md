@@ -67,7 +67,7 @@ The repository SHALL provide a Docker Compose based environment for validating t
 - **GIVEN** a developer or CI runner launches the repository's e2e environment
 - **WHEN** the compose stack starts
 - **THEN** it includes the community scanner/feed setup
-- **AND** a metasploitable container as the scan target
+- **AND** a lightweight HTTP target container as the scan target
 - **AND** any supporting services required for the example and test flow.
 
 ### Requirement: End-to-end test coverage
@@ -78,6 +78,7 @@ The repository SHALL include an end-to-end test that exercises the documented wo
 - **WHEN** the e2e test executes
 - **THEN** it performs Full & Fast configuration conversion
 - **AND** creates, starts, stops, retrieves results for, and deletes a scan
+- **AND** writes the lifecycle result payload in a stable machine-readable JSON format for automation and debugging
 - **AND** fails if any lifecycle step cannot be completed.
 
 ### Requirement: GitHub Actions workflow for validation
