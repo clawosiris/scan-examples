@@ -89,6 +89,23 @@ Run the example container against that stack:
 docker compose run --rm example e2e --host target --tcp-ports 80
 ```
 
+## Local development with uv
+
+Create the project environment and install dev dependencies:
+
+```bash
+uv sync --locked --extra dev
+```
+
+Run the tests or CLI inside the managed environment:
+
+```bash
+uv run pytest
+uv run openvas-example --help
+```
+
+This keeps the project virtualenv in `.venv/` and avoids ad-hoc `pip install` drift.
+
 ## GitHub Actions
 
 The repo includes `.github/workflows/tests.yml` with:
