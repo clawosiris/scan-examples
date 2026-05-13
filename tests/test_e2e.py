@@ -6,12 +6,13 @@ from scan_examples.e2e import E2EResult, dump_result, run_lifecycle, summarize_r
 
 
 class DummyClient:
-    def __init__(self, results_sequence=None) -> None:
+    def __init__(self, results_sequence=None, status_sequence=None) -> None:
         self.calls: list[tuple[str, object]] = []
         self.results_sequence = list(results_sequence or [[
             {"id": 1, "oid": "1.2.3", "type": "alarm", "severity": "high"},
             {"id": 2, "type": "log", "cvss": 9.3},
         ]])
+        self.status_sequence = list(status_sequence or [{"status": "running"}])
 
     def create_scan(self, payload):
         self.calls.append(("create", payload))
@@ -26,6 +27,12 @@ class DummyClient:
         if len(self.results_sequence) > 1:
             return self.results_sequence.pop(0)
         return self.results_sequence[0]
+
+    def get_scan_status(self, scan_id: str):
+        self.calls.append(("status", scan_id))
+        if len(self.status_sequence) > 1:
+            return self.status_sequence.pop(0)
+        return self.status_sequence[0]
 
     def stop_scan(self, scan_id: str):
         self.calls.append(("stop", scan_id))
@@ -55,6 +62,7 @@ def test_dump_result_is_machine_readable():
         create_response={"id": "scan-123"},
         start_response={"status": "started"},
         stop_response={"status": "stopped"},
+        final_status={"status": "stopped"},
         results=[{"id": 1, "type": "alarm"}],
         enriched_results=[{"result": {"id": 1, "type": "alarm"}, "vt_metadata_status": "missing_oid", "vt_metadata": None}],
         findings_summary={"total": 1, "by_severity": {"unknown": 1}, "by_type": {"alarm": 1}},
@@ -106,6 +114,7 @@ def test_run_lifecycle_emits_progress_in_order(monkeypatch):
 
     assert result.findings_summary["total"] == 2
     assert result.stop_response == {"status": "stopped"}
+    assert result.final_status == {"status": "running"}
     assert result.delete_response == {"status": "deleted"}
     assert result.enriched_results[0]["vt_metadata_status"] == "matched"
     assert result.enriched_results[1]["vt_metadata_status"] == "missing_oid"
@@ -122,6 +131,57 @@ def test_run_lifecycle_emits_progress_in_order(monkeypatch):
         "Deleting scan scan-123",
         "Deleted scan scan-123",
     ]
+
+
+def test_run_lifecycle_can_wait_for_scan_completion(monkeypatch):
+    client = DummyClient(
+        results_sequence=[
+            [{"id": 1, "oid": "1.2.3", "type": "alarm", "severity": "high"}],
+            [{"id": 1, "oid": "1.2.3", "type": "alarm", "severity": "high"}, {"id": 2, "type": "log"}],
+        ],
+        status_sequence=[{"status": "running"}, {"status": "succeeded"}],
+    )
+    messages: list[str] = []
+    sleeps: list[float] = []
+    monkeypatch.setattr("scan_examples.e2e.time.sleep", lambda seconds: sleeps.append(seconds))
+    monotonic_values = iter([0.0, 1.0, 2.0])
+    monkeypatch.setattr("scan_examples.e2e.time.monotonic", lambda: next(monotonic_values))
+
+    result = run_lifecycle(
+        client=client,
+        payload={"target": {}, "vts": []},
+        wait_before_results=0,
+        results_timeout=60,
+        results_poll_interval=5,
+        completion_mode="scan-complete",
+        progress=messages.append,
+    )
+
+    assert result.findings_summary["total"] == 2
+    assert result.final_status == {"status": "succeeded"}
+    assert result.stop_response == {"status": "not_stopped", "reason": "scan completed"}
+    assert ("stop", "scan-123") not in client.calls
+    assert sleeps == [5]
+    assert "Scan still running after 1 findings; waiting 5s before retrying" in messages
+    assert "Scan scan-123 status: succeeded" in messages
+
+
+def test_run_lifecycle_fails_when_completed_scan_has_no_findings(monkeypatch):
+    client = DummyClient(results_sequence=[[]], status_sequence=[{"status": "succeeded"}])
+    messages: list[str] = []
+    monkeypatch.setattr("scan_examples.e2e.time.sleep", lambda seconds: None)
+    monkeypatch.setattr("scan_examples.e2e.time.monotonic", lambda: 0.0)
+
+    with pytest.raises(RuntimeError, match="completed without findings"):
+        run_lifecycle(
+            client=client,
+            payload={"target": {}, "vts": []},
+            wait_before_results=0,
+            completion_mode="scan-complete",
+            progress=messages.append,
+        )
+
+    assert ("delete", "scan-123") in client.calls
 
 
 def test_run_lifecycle_stops_and_deletes_on_timeout(monkeypatch):

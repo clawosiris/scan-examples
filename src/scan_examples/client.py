@@ -63,6 +63,12 @@ class OpenVASScannerClient:
     def stop_scan(self, scan_id: str) -> Any:
         return self.scan_action(scan_id, "stop")
 
+    def get_scan_status(self, scan_id: str) -> dict[str, Any]:
+        data = self._request("GET", f"/scans/{scan_id}/status")
+        if isinstance(data, dict):
+            return data
+        raise OpenVASAPIError(f"Unexpected scan status payload: {data!r}")
+
     def get_results(self, scan_id: str) -> list[dict[str, Any]]:
         data = self._request("GET", f"/scans/{scan_id}/results")
         if isinstance(data, list):

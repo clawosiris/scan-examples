@@ -182,6 +182,7 @@ def cmd_e2e(args: argparse.Namespace) -> int:
         create_retry_delay=args.create_retry_delay,
         results_timeout=args.results_timeout,
         results_poll_interval=args.results_poll_interval,
+        completion_mode=args.completion_mode,
         vt_index=vt_index,
         progress=progress,
     )
@@ -324,6 +325,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=_non_negative_float,
         default=_non_negative_float(os.environ.get("RESULTS_POLL_INTERVAL", "15")),
         help="Seconds to wait between results polls",
+    )
+    e2e.add_argument(
+        "--completion-mode",
+        choices=["first-results", "scan-complete"],
+        default=os.environ.get("E2E_COMPLETION_MODE", "first-results"),
+        help="Stop after first findings for quick checks, or wait for natural scan completion",
     )
     e2e.set_defaults(func=cmd_e2e)
 

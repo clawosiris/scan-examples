@@ -9,6 +9,9 @@ from .client import OpenVASAPIError, OpenVASScannerClient
 from .feed import enrich_results
 
 ProgressCallback = Callable[[str], None]
+SCAN_COMPLETION_MODES = {"first-results", "scan-complete"}
+RUNNING_SCAN_STATUSES = {"requested", "running", "stored"}
+SUCCESS_SCAN_STATUSES = {"succeeded"}
 
 
 @dataclass(slots=True)
@@ -17,6 +20,7 @@ class E2EResult:
     create_response: Any
     start_response: Any
     stop_response: Any
+    final_status: dict[str, Any] | None
     results: list[dict[str, Any]]
     enriched_results: list[dict[str, Any]]
     findings_summary: dict[str, Any]
@@ -28,6 +32,7 @@ class E2EResult:
             "create_response": self.create_response,
             "start_response": self.start_response,
             "stop_response": self.stop_response,
+            "final_status": self.final_status,
             "results": self.results,
             "enriched_results": self.enriched_results,
             "findings_summary": self.findings_summary,
@@ -85,6 +90,23 @@ def _extract_severity_label(result: dict[str, Any]) -> str:
     return "unknown"
 
 
+def _extract_status_phase(status: dict[str, Any] | None) -> str | None:
+    if not status:
+        return None
+    value = status.get("status")
+    return value.strip().lower() if isinstance(value, str) and value.strip() else None
+
+
+def _status_is_running(status: dict[str, Any] | None) -> bool:
+    phase = _extract_status_phase(status)
+    return phase in RUNNING_SCAN_STATUSES
+
+
+def _status_is_success(status: dict[str, Any] | None) -> bool:
+    phase = _extract_status_phase(status)
+    return phase in SUCCESS_SCAN_STATUSES
+
+
 def summarize_results(results: list[dict[str, Any]]) -> dict[str, Any]:
     summary = {
         "total": len(results),
@@ -113,6 +135,7 @@ def run_lifecycle(
     create_retry_delay: float = 10.0,
     results_timeout: float = 300.0,
     results_poll_interval: float = 15.0,
+    completion_mode: str = "first-results",
     vt_index: dict[str, dict[str, Any]] | None = None,
     progress: ProgressCallback | None = None,
 ) -> E2EResult:
@@ -120,11 +143,14 @@ def run_lifecycle(
     create_retry_delay = max(create_retry_delay, 0)
     results_timeout = max(results_timeout, 0)
     results_poll_interval = max(results_poll_interval, 0)
+    if completion_mode not in SCAN_COMPLETION_MODES:
+        raise ValueError(f"Unsupported completion mode {completion_mode!r}; expected one of {sorted(SCAN_COMPLETION_MODES)}")
 
     scan_id: str | None = None
     start_response: Any = None
     stop_response: Any = None
     delete_response: Any = None
+    final_status: dict[str, Any] | None = None
     results: list[dict[str, Any]] = []
     findings_summary: dict[str, Any] = {"total": 0, "by_severity": {}, "by_type": {}}
     last_error: Exception | None = None
@@ -162,23 +188,45 @@ def run_lifecycle(
             _emit(progress, f"Fetching results for {scan_id} (poll {attempts})")
             results = client.get_results(scan_id)
             if results:
+                if not findings_seen:
+                    _emit(progress, f"Fetched {len(results)} findings")
                 findings_seen = True
-                _emit(progress, f"Fetched {len(results)} findings")
+
+            if completion_mode == "scan-complete":
+                final_status = client.get_scan_status(scan_id)
+                phase = _extract_status_phase(final_status) or "unknown"
+                _emit(progress, f"Scan {scan_id} status: {phase}")
+                if not _status_is_running(final_status):
+                    if not _status_is_success(final_status):
+                        raise RuntimeError(f"Scan {scan_id} finished with status {phase}")
+                    break
+            elif results:
+                final_status = client.get_scan_status(scan_id)
                 break
 
             now = time.monotonic()
             if now >= deadline:
+                wait_target = "scan completion" if completion_mode == "scan-complete" else "findings"
                 raise RuntimeError(
-                    f"Timed out after {results_timeout:g}s waiting for findings for scan {scan_id}"
+                    f"Timed out after {results_timeout:g}s waiting for {wait_target} for scan {scan_id}"
                 )
-            _emit(progress, f"No findings yet; waiting {results_poll_interval:g}s before retrying")
+            if results and completion_mode == "scan-complete":
+                _emit(progress, f"Scan still running after {len(results)} findings; waiting {results_poll_interval:g}s before retrying")
+            else:
+                _emit(progress, f"No findings yet; waiting {results_poll_interval:g}s before retrying")
             time.sleep(results_poll_interval)
+
+        if not results:
+            raise RuntimeError(f"Scan {scan_id} completed without findings")
 
         findings_summary = summarize_results(results)
         enriched_results = enrich_results(results, vt_index)
 
-        _emit(progress, f"Stopping scan {scan_id}")
-        stop_response = client.stop_scan(scan_id)
+        if completion_mode == "first-results":
+            _emit(progress, f"Stopping scan {scan_id}")
+            stop_response = client.stop_scan(scan_id)
+        else:
+            stop_response = {"status": "not_stopped", "reason": "scan completed"}
 
         _emit(progress, f"Deleting scan {scan_id}")
         delete_response = client.delete_scan(scan_id)
@@ -189,6 +237,7 @@ def run_lifecycle(
             create_response=create_response,
             start_response=start_response,
             stop_response=stop_response,
+            final_status=final_status,
             results=results,
             enriched_results=enriched_results,
             findings_summary=findings_summary,

@@ -55,6 +55,13 @@ def test_get_results_accepts_wrapped_results():
     assert client.get_results("scan-123") == [{"id": 1}]
 
 
+def test_get_scan_status_returns_status_payload():
+    client = OpenVASScannerClient("http://scanner")
+    client.session = DummySession([make_response(payload={"status": "succeeded"})])
+
+    assert client.get_scan_status("scan-123") == {"status": "succeeded"}
+
+
 def test_error_response_raises():
     client = OpenVASScannerClient("http://scanner")
     client.session = DummySession([make_response(status_code=500, payload={"error": "boom"})])

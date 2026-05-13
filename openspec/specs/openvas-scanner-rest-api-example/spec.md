@@ -107,8 +107,9 @@ The repository SHALL include an end-to-end test that exercises the documented wo
 - **THEN** it performs Full & Fast configuration conversion
 - **AND** logs the major lifecycle steps in a human-readable way while the workflow is running
 - **AND** pretty-prints enriched findings in the CI or terminal log
-- **AND** creates, starts, retrieves results for, stops, and deletes a scan
-- **AND** waits for findings to appear before ending the scan or failing on timeout
+- **AND** creates, starts, retrieves results for, and deletes a scan
+- **AND** supports a quick mode that stops the scan after initial findings are available
+- **AND** supports a full mode that keeps polling until the scan reaches `succeeded` instead of stopping at initial findings
 - **AND** writes the lifecycle result payload in a stable machine-readable JSON format for automation and debugging
 - **AND** includes both raw `results` and `enriched_results`
 - **AND** includes summary stats for the number of findings returned by the scan
@@ -131,5 +132,6 @@ The repository SHALL provide a GitHub Actions workflow that validates the exampl
 - **WHEN** the GitHub Actions workflow runs
 - **THEN** it builds the example container
 - **AND** starts the Docker Compose test environment
-- **AND** runs the e2e test
+- **AND** runs the e2e test in quick completion mode for pull requests and non-main pushes
+- **AND** runs the e2e test in full scan-completion mode for pushes to `main`
 - **AND** preserves logs or artifacts sufficient to debug failures.
