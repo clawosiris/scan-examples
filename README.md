@@ -185,7 +185,22 @@ The e2e completion behavior is controlled by `--completion-mode` / `E2E_COMPLETI
 
 For long-running CI scans, `--no-findings-increment-timeout` / `E2E_NO_FINDINGS_INCREMENT_TIMEOUT` can stop a still-running scan after the finding count has not increased for the configured number of seconds. CI sets this to 1500 seconds (25 minutes) for `main` push scans, keeping the findings collected so far and avoiding a long tail where OpenVAS keeps running without producing new results. Set it to `0` to disable the idle heuristic.
 
-The GitHub Actions workflow can also be triggered manually. Its inputs let you choose the completion mode, results timeout, and no-findings-increment timeout. Use the `full_scan` input for a manual full scan: it forces `scan-complete` mode and disables the no-findings idle timeout so the scan waits until OpenVAS reports natural completion.
+The GitHub Actions workflow can also be triggered manually. Its inputs let you choose the
+completion mode, results timeout, and no-findings-increment timeout.
+
+To run a full scan manually from GitHub Actions:
+
+1. Open the repository's **Actions** tab.
+2. Select the **tests** workflow.
+3. Click **Run workflow**.
+4. Choose the branch to run, usually `main`.
+5. Set `full_scan` to `true`.
+6. Optionally raise `results_timeout` if you expect the scan to take longer than the default 1800 seconds.
+7. Click **Run workflow**.
+
+When `full_scan` is `true`, the workflow forces `scan-complete` mode and sets the no-findings
+idle timeout to `0`, so the scan waits until OpenVAS reports natural completion. The workflow
+uploads `scan-results.json` and `docker-compose.log` as the `scan-examples-e2e-artifacts` artifact.
 
 The enrichment step first uses `vt-metadata.json` from the mounted vulnerability-test feed.
 The code checks both `<VT_PATH>/vt-metadata.json` and `<VT_PATH>/nasl/vt-metadata.json`.
