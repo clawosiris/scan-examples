@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -56,7 +57,7 @@ def test_cmd_e2e_logs_default_ports_and_scan_config(monkeypatch, capsys, tmp_pat
         str(output_path),
     ])
 
-    monkeypatch.setattr(cli, "discover_feed_layout", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(cli, "discover_feed_layout", lambda *_args, **_kwargs: SimpleNamespace(vt_path=Path("/tmp/vt")))
     monkeypatch.setattr(cli, "convert_scan_config", lambda **_kwargs: {"target": {}, "vts": []})
     monkeypatch.setattr(cli, "_load_vt_index_for_cli", lambda _vt_path, progress=None: VT_INDEX)
 
@@ -99,7 +100,7 @@ def test_cmd_e2e_falls_back_to_bundled_ports_when_feed_default_portlist_is_missi
     ])
 
     attempts = []
-    monkeypatch.setattr(cli, "discover_feed_layout", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(cli, "discover_feed_layout", lambda *_args, **_kwargs: SimpleNamespace(vt_path=Path("/tmp/vt")))
     monkeypatch.setattr(cli, "_load_vt_index_for_cli", lambda _vt_path, progress=None: VT_INDEX)
 
     def fake_convert_scan_config(**kwargs):
@@ -140,7 +141,7 @@ def test_cmd_e2e_passes_custom_scan_config_and_ports(monkeypatch, tmp_path):
     ])
 
     captured = {}
-    monkeypatch.setattr(cli, "discover_feed_layout", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(cli, "discover_feed_layout", lambda *_args, **_kwargs: SimpleNamespace(vt_path=Path("/tmp/vt")))
     monkeypatch.setattr(cli, "_load_vt_index_for_cli", lambda _vt_path, progress=None: VT_INDEX)
 
     def fake_convert_scan_config(**kwargs):
