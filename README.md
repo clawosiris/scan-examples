@@ -195,7 +195,8 @@ To run a full scan manually from GitHub Actions:
 3. Click **Run workflow**.
 4. Choose the branch to run, usually `main`.
 5. Set `full_scan` to `true`.
-6. Optionally raise `results_timeout` if you expect the scan to take longer than the default 1800 seconds.
+6. Optionally raise `results_timeout` if you expect the scan to take longer than the default
+   1800 seconds.
 7. Click **Run workflow**.
 
 When `full_scan` is `true`, the workflow forces `scan-complete` mode and sets the no-findings
