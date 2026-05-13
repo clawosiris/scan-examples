@@ -469,10 +469,11 @@ table_driven_lsc = yes
 openvasd_server = https://0.0.0.0:8443
 ```
 
-
 ### Compose Feed Sync Implementation
 
-This repository uses the `registry.community.greenbone.net/community/greenbone-feed-sync` container to populate persistent Docker named volumes instead of starting the dedicated community feed data-copy containers. The Compose service runs:
+This repository uses the `registry.community.greenbone.net/community/greenbone-feed-sync` container to
+populate persistent Docker named volumes instead of starting the dedicated community feed data-copy
+containers. The Compose service runs:
 
 ```bash
 greenbone-feed-sync --type nasl
@@ -486,7 +487,9 @@ Those commands populate the volumes mounted by `ospd-openvas`, `openvasd`, and t
 |---|---|---|---|
 | NASL vulnerability tests | `vt_data_vol` | `/var/lib/openvas/plugins` | `/var/lib/openvas/plugins`, `/feed/vulnerability-tests` |
 | Notus advisories | `notus_data_vol` | `/var/lib/notus` | `/var/lib/notus` |
-| GVMD data objects (scan configs, port lists, report formats) | `data_objects_vol` | `/var/lib/gvm/data-objects/gvmd` | `/feed/data-objects` |
+| GVMD data objects | `data_objects_vol` | `/var/lib/gvm/data-objects/gvmd` | `/feed/data-objects` |
+
+GVMD data objects include scan configs, port lists, and report formats.
 
 Keeping these volumes between CI runs lets rsync fetch only changed feed content on later runs.
 
