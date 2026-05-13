@@ -10,10 +10,20 @@ from typing import Any
 
 SCAN_CONFIG_ALIASES = {
     "full-and-fast": [
-        "full-and-fast-daba56c8-73ec-11df-a475-002264764cea.xml",
-        "full-and-fast.xml",
+        [
+            "discovery-8715c877-47a0-438d-98a3-27c7a6ab2196.xml",
+            "discovery.xml",
+        ],
+        [
+            "full-and-fast-daba56c8-73ec-11df-a475-002264764cea.xml",
+            "full-and-fast.xml",
+        ],
     ],
 }
+OPENVAS_DEFAULT_PORTLIST_FILENAMES = [
+    "openvas-default-c7e03b6c-3bbe-11e1-a057-406186ea4fc5.xml",
+    "openvas-default.xml",
+]
 
 
 class ScanConfigConversionError(RuntimeError):
@@ -68,20 +78,20 @@ def _write_portlist_xml(tcp_ports: list[int]) -> Path:
         return Path(handle.name)
 
 
-def _resolve_scan_config_path(layout: FeedLayout, scan_config: str) -> Path:
+def _resolve_scan_config_paths(layout: FeedLayout, scan_config: str) -> list[Path]:
     alias_candidates = SCAN_CONFIG_ALIASES.get(scan_config)
     if alias_candidates is not None:
-        return _first_existing(layout.data_objects_path, alias_candidates)
+        return [_first_existing(layout.data_objects_path, candidates) for candidates in alias_candidates]
 
     requested = Path(scan_config)
     if requested.is_absolute() and requested.is_file():
-        return requested
+        return [requested]
 
     direct_candidates = [scan_config]
     if requested.suffix != ".xml":
         direct_candidates.append(f"{scan_config}.xml")
     try:
-        return _first_existing(layout.data_objects_path, direct_candidates)
+        return [_first_existing(layout.data_objects_path, direct_candidates)]
     except FileNotFoundError as exc:
         raise FileNotFoundError(
             f"Could not resolve scan config {scan_config!r} under {layout.data_objects_path}"
@@ -93,17 +103,17 @@ def _build_scannerctl_commands(
     scannerctl_bin: str,
     vt_path: Path,
     portlist: Path | None,
-    scan_config: Path,
+    scan_configs: list[Path],
 ) -> list[list[str]]:
     modern = [scannerctl_bin, "scan-config", "-i", "-p", str(vt_path)]
     if portlist is not None:
         modern.extend(["-l", str(portlist)])
-    modern.append(str(scan_config))
+    modern.extend(str(path) for path in scan_configs)
 
     legacy = [scannerctl_bin, "scan-config", "-s", str(vt_path)]
     if portlist is not None:
         legacy.append(str(portlist))
-    legacy.append(str(scan_config))
+    legacy.extend(str(path) for path in scan_configs)
     return [modern, legacy]
 
 
@@ -119,12 +129,13 @@ def convert_scan_config(
     tcp_ports: list[int] | None = None,
     scannerctl_bin: str = "scannerctl",
 ) -> dict[str, Any]:
-    scan_config_path = _resolve_scan_config_path(layout, scan_config)
+    scan_config_paths = _resolve_scan_config_paths(layout, scan_config)
     generated_portlist: Path | None = None
-    portlist: Path | None = None
     if tcp_ports:
         generated_portlist = _write_portlist_xml(tcp_ports)
         portlist = generated_portlist
+    else:
+        portlist = _first_existing(layout.data_objects_path, OPENVAS_DEFAULT_PORTLIST_FILENAMES)
     base_payload = build_target_payload(hosts, tcp_ports=tcp_ports)
 
     try:
@@ -132,7 +143,7 @@ def convert_scan_config(
             scannerctl_bin=scannerctl_bin,
             vt_path=layout.vt_path,
             portlist=portlist,
-            scan_config=scan_config_path,
+            scan_configs=scan_config_paths,
         )
         result = subprocess.run(
             commands[0],
