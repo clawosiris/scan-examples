@@ -250,6 +250,7 @@ def cmd_e2e(args: argparse.Namespace) -> int:
         create_retry_delay=args.create_retry_delay,
         results_timeout=args.results_timeout,
         results_poll_interval=args.results_poll_interval,
+        no_findings_increment_timeout=args.no_findings_increment_timeout,
         completion_mode=args.completion_mode,
         vt_index=vt_index,
         scap_cve_index=scap_cve_index,
@@ -424,6 +425,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=_non_negative_float,
         default=_non_negative_float(os.environ.get("RESULTS_POLL_INTERVAL", "15")),
         help="Seconds to wait between results polls",
+    )
+    e2e.add_argument(
+        "--no-findings-increment-timeout",
+        type=_non_negative_float,
+        default=_non_negative_float(os.environ.get("E2E_NO_FINDINGS_INCREMENT_TIMEOUT", "0")),
+        help="For scan-complete mode, stop after this many seconds without an increase in finding count; 0 disables",
     )
     e2e.add_argument(
         "--completion-mode",

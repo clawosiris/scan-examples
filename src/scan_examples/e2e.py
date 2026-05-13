@@ -135,6 +135,7 @@ def run_lifecycle(
     create_retry_delay: float = 10.0,
     results_timeout: float = 300.0,
     results_poll_interval: float = 15.0,
+    no_findings_increment_timeout: float = 0.0,
     completion_mode: str = "first-results",
     vt_index: dict[str, dict[str, Any]] | None = None,
     scap_cve_index: dict[str, dict[str, Any]] | None = None,
@@ -144,6 +145,7 @@ def run_lifecycle(
     create_retry_delay = max(create_retry_delay, 0)
     results_timeout = max(results_timeout, 0)
     results_poll_interval = max(results_poll_interval, 0)
+    no_findings_increment_timeout = max(no_findings_increment_timeout, 0)
     if completion_mode not in SCAN_COMPLETION_MODES:
         raise ValueError(f"Unsupported completion mode {completion_mode!r}; expected one of {sorted(SCAN_COMPLETION_MODES)}")
 
@@ -156,6 +158,9 @@ def run_lifecycle(
     findings_summary: dict[str, Any] = {"total": 0, "by_severity": {}, "by_type": {}}
     last_error: Exception | None = None
     findings_seen = False
+    last_findings_count = 0
+    last_findings_increment_at: float | None = None
+    completion_reason = "scan_completed"
 
     try:
         for attempt in range(1, create_retries + 1):
@@ -182,12 +187,20 @@ def run_lifecycle(
             _emit(progress, f"Initial wait {wait_before_results:g}s before polling for results")
             time.sleep(wait_before_results)
 
-        deadline = time.monotonic() + results_timeout
+        start_polling_at = time.monotonic()
+        deadline = start_polling_at + results_timeout
+        last_findings_increment_at = start_polling_at
         attempts = 0
         while True:
             attempts += 1
             _emit(progress, f"Fetching results for {scan_id} (poll {attempts})")
             results = client.get_results(scan_id)
+            now = time.monotonic()
+            findings_count = len(results)
+            if findings_count > last_findings_count:
+                _emit(progress, f"Findings increased from {last_findings_count} to {findings_count}")
+                last_findings_count = findings_count
+                last_findings_increment_at = now
             if results:
                 if not findings_seen:
                     _emit(progress, f"Fetched {len(results)} findings")
@@ -200,12 +213,23 @@ def run_lifecycle(
                 if not _status_is_running(final_status):
                     if not _status_is_success(final_status):
                         raise RuntimeError(f"Scan {scan_id} finished with status {phase}")
+                    completion_reason = "scan_completed"
+                    break
+                if (
+                    no_findings_increment_timeout > 0
+                    and last_findings_increment_at is not None
+                    and now - last_findings_increment_at >= no_findings_increment_timeout
+                ):
+                    completion_reason = "findings_stalled"
+                    _emit(
+                        progress,
+                        f"No increase in findings for {no_findings_increment_timeout:g}s; stopping scan {scan_id}",
+                    )
                     break
             elif results:
                 final_status = client.get_scan_status(scan_id)
                 break
 
-            now = time.monotonic()
             if now >= deadline:
                 wait_target = "scan completion" if completion_mode == "scan-complete" else "findings"
                 raise RuntimeError(
@@ -227,7 +251,13 @@ def run_lifecycle(
             _emit(progress, f"Stopping scan {scan_id}")
             stop_response = client.stop_scan(scan_id)
         else:
-            stop_response = {"status": "not_stopped", "reason": "scan completed"}
+            if completion_reason == "findings_stalled":
+                _emit(progress, f"Stopping scan {scan_id}")
+                stop_response = client.stop_scan(scan_id)
+                if isinstance(stop_response, dict):
+                    stop_response = {**stop_response, "reason": "findings_stalled"}
+            else:
+                stop_response = {"status": "not_stopped", "reason": "scan_completed"}
 
         _emit(progress, f"Deleting scan {scan_id}")
         delete_response = client.delete_scan(scan_id)

@@ -126,6 +126,7 @@ def test_run_lifecycle_emits_progress_in_order(monkeypatch):
         "Fetching results for scan-123 (poll 1)",
         "No findings yet; waiting 5s before retrying",
         "Fetching results for scan-123 (poll 2)",
+        "Findings increased from 0 to 2",
         "Fetched 2 findings",
         "Stopping scan scan-123",
         "Deleting scan scan-123",
@@ -159,11 +160,43 @@ def test_run_lifecycle_can_wait_for_scan_completion(monkeypatch):
 
     assert result.findings_summary["total"] == 2
     assert result.final_status == {"status": "succeeded"}
-    assert result.stop_response == {"status": "not_stopped", "reason": "scan completed"}
+    assert result.stop_response == {"status": "not_stopped", "reason": "scan_completed"}
     assert ("stop", "scan-123") not in client.calls
     assert sleeps == [5]
     assert "Scan still running after 1 findings; waiting 5s before retrying" in messages
     assert "Scan scan-123 status: succeeded" in messages
+
+
+def test_run_lifecycle_stops_scan_when_findings_stall(monkeypatch):
+    client = DummyClient(
+        results_sequence=[
+            [{"id": 1, "oid": "1.2.3", "type": "alarm", "severity": "high"}],
+            [{"id": 1, "oid": "1.2.3", "type": "alarm", "severity": "high"}],
+        ],
+        status_sequence=[{"status": "running"}, {"status": "running"}],
+    )
+    messages: list[str] = []
+    sleeps: list[float] = []
+    monkeypatch.setattr("scan_examples.e2e.time.sleep", lambda seconds: sleeps.append(seconds))
+    monotonic_values = iter([0.0, 1.0, 1502.0])
+    monkeypatch.setattr("scan_examples.e2e.time.monotonic", lambda: next(monotonic_values))
+
+    result = run_lifecycle(
+        client=client,
+        payload={"target": {}, "vts": []},
+        wait_before_results=0,
+        results_timeout=5400,
+        results_poll_interval=30,
+        no_findings_increment_timeout=1500,
+        completion_mode="scan-complete",
+        progress=messages.append,
+    )
+
+    assert result.findings_summary["total"] == 1
+    assert result.stop_response == {"status": "stopped", "reason": "findings_stalled"}
+    assert ("stop", "scan-123") in client.calls
+    assert sleeps == [30]
+    assert "No increase in findings for 1500s; stopping scan scan-123" in messages
 
 
 def test_run_lifecycle_fails_when_completed_scan_has_no_findings(monkeypatch):

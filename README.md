@@ -98,6 +98,10 @@ The e2e completion behavior is controlled by `--completion-mode` / `E2E_COMPLETI
 - `first-results` (default): quick validation for commits and PRs; stop once initial findings are available.
 - `scan-complete`: full validation for pushes to `main`; keep polling status and results until the scan finishes successfully.
 
+For long-running CI scans, `--no-findings-increment-timeout` / `E2E_NO_FINDINGS_INCREMENT_TIMEOUT` can stop a still-running scan after the finding count has not increased for the configured number of seconds. CI sets this to 1500 seconds (25 minutes) for `main` push scans, keeping the findings collected so far and avoiding a long tail where OpenVAS keeps running without producing new results. Set it to `0` to disable the idle heuristic.
+
+The GitHub Actions workflow can also be triggered manually. Its inputs let you choose the completion mode, results timeout, and no-findings-increment timeout. Use the `full_scan` input for a manual full scan: it forces `scan-complete` mode and disables the no-findings idle timeout so the scan waits until OpenVAS reports natural completion.
+
 The enrichment step first uses `vt-metadata.json` from the mounted vulnerability-test feed. The code checks both `<VT_PATH>/vt-metadata.json` and `<VT_PATH>/nasl/vt-metadata.json`. If the file is unavailable, malformed, or shaped unexpectedly, the workflow still returns raw results and marks VT enrichment as unavailable instead of faceplanting.
 
 If `--scap-path` / `SCAP_PATH` points at SCAP/NVD CVE JSON data, enrichment then uses CVE references found in the matched VT metadata to attach CVE details such as descriptions, publication timestamps, references, CWE weaknesses, CVSS metrics, and affected CPEs. SCAP enrichment is optional; missing or unreadable SCAP data is logged and the result JSON marks CVE metadata as unavailable rather than failing the scan workflow.

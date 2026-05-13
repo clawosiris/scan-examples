@@ -5,6 +5,26 @@ on:
     branches: [main, devel]
   pull_request:
   workflow_dispatch:
+    inputs:
+      full_scan:
+        description: Run e2e in scan-complete mode and wait for the scan to fully finish; disables the no-findings idle timeout
+        type: boolean
+        default: false
+      completion_mode:
+        description: e2e completion mode when full_scan is false
+        type: choice
+        options:
+          - first-results
+          - scan-complete
+        default: first-results
+      results_timeout:
+        description: Maximum seconds to wait for e2e results/completion
+        type: string
+        default: '1800'
+      no_findings_increment_timeout:
+        description: Seconds without finding-count growth before stopping scan-complete runs; 0 disables
+        type: string
+        default: '1500'
 
 jobs:
   unit:
@@ -38,18 +58,30 @@ jobs:
         run: docker compose up -d vulnerability-tests notus-data data-objects gpg-data redis-server configure-openvas openvasd target
       - name: Run end-to-end custom scan config test
         run: |
-          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "${{ inputs.full_scan }}" == "true" ]]; then
+            completion_mode="scan-complete"
+            results_timeout="${{ inputs.results_timeout }}"
+            no_findings_increment_timeout="0"
+          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            completion_mode="${{ inputs.completion_mode }}"
+            results_timeout="${{ inputs.results_timeout }}"
+            no_findings_increment_timeout="${{ inputs.no_findings_increment_timeout }}"
+          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]; then
             completion_mode="scan-complete"
             results_timeout="5400"
+            no_findings_increment_timeout="1500"
           else
             completion_mode="first-results"
             results_timeout="1800"
+            no_findings_increment_timeout="0"
           fi
           echo "Using e2e completion mode: ${completion_mode}"
+          echo "Using no-findings-increment timeout: ${no_findings_increment_timeout}s"
           docker compose run --rm \
             -v "$PWD/artifacts:/artifacts" \
             -e SCAN_CONFIG_JSON=/app/scanconfigs/scanconfig-modified.json.zip \
             -e E2E_COMPLETION_MODE="${completion_mode}" \
+            -e E2E_NO_FINDINGS_INCREMENT_TIMEOUT="${no_findings_increment_timeout}" \
             example e2e --host target \
               --wait-before-results 45 \
               --results-timeout "${results_timeout}" \
