@@ -13,6 +13,9 @@ from .e2e import dump_result, run_lifecycle
 from .feed import dump_pretty_enriched_results, enrich_results, load_vt_metadata_index
 
 
+E2E_FALLBACK_TCP_PORTS = [21, 22, 80, 139, 445, 3306]
+
+
 def _non_negative_float(raw: str) -> float:
     value = float(raw)
     if value < 0:
@@ -59,9 +62,44 @@ def _load_vt_index_for_cli(vt_path: str, progress: Callable[[str], None] | None 
     return vt_index
 
 
+def _convert_with_fallback(
+    *,
+    layout,
+    hosts: list[str],
+    scan_config: str,
+    tcp_ports: list[int],
+    scannerctl_bin: str,
+    progress: Callable[[str], None] | None = None,
+):
+    try:
+        return convert_scan_config(
+            layout=layout,
+            hosts=hosts,
+            scan_config=scan_config,
+            tcp_ports=tcp_ports,
+            scannerctl_bin=scannerctl_bin,
+        )
+    except FileNotFoundError:
+        if tcp_ports:
+            raise
+        if progress is not None:
+            progress(
+                "Feed default port list was not found; falling back to bundled metasploitable service ports "
+                f"{', '.join(str(port) for port in E2E_FALLBACK_TCP_PORTS)}"
+            )
+        return convert_scan_config(
+            layout=layout,
+            hosts=hosts,
+            scan_config=scan_config,
+            tcp_ports=E2E_FALLBACK_TCP_PORTS,
+            scannerctl_bin=scannerctl_bin,
+        )
+
+
+
 def cmd_convert(args: argparse.Namespace) -> int:
     layout = discover_feed_layout(args.data_objects_path, args.vt_path)
-    payload = convert_scan_config(
+    payload = _convert_with_fallback(
         layout=layout,
         hosts=args.host,
         scan_config=args.scan_config,
@@ -127,12 +165,13 @@ def cmd_e2e(args: argparse.Namespace) -> int:
     layout = discover_feed_layout(args.data_objects_path, args.vt_path)
     vt_index = _load_vt_index_for_cli(args.vt_path, progress=progress)
     progress("Converting scan configuration with scannerctl")
-    payload = convert_scan_config(
+    payload = _convert_with_fallback(
         layout=layout,
         hosts=args.host,
         scan_config=args.scan_config,
         tcp_ports=tcp_ports,
         scannerctl_bin=args.scannerctl_bin,
+        progress=progress,
     )
     client = _build_client(args)
     result = run_lifecycle(

@@ -87,6 +87,43 @@ def test_cmd_e2e_logs_default_ports_and_scan_config(monkeypatch, capsys, tmp_pat
     assert Path(output_path).read_text(encoding="utf-8") == '{"ok": true}\n'
 
 
+def test_cmd_e2e_falls_back_to_bundled_ports_when_feed_default_portlist_is_missing(monkeypatch, tmp_path, capsys):
+    parser = build_parser()
+    output_path = tmp_path / "result.json"
+    args = parser.parse_args([
+        "e2e",
+        "--host",
+        "target",
+        "--output",
+        str(output_path),
+    ])
+
+    attempts = []
+    monkeypatch.setattr(cli, "discover_feed_layout", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(cli, "_load_vt_index_for_cli", lambda _vt_path, progress=None: VT_INDEX)
+
+    def fake_convert_scan_config(**kwargs):
+        attempts.append(kwargs)
+        if len(attempts) == 1:
+            raise FileNotFoundError("missing default port list")
+        return {"target": {}, "vts": []}
+
+    monkeypatch.setattr(cli, "convert_scan_config", fake_convert_scan_config)
+    monkeypatch.setattr(cli, "_build_client", lambda _args: object())
+
+    class DummyResult:
+        findings_summary = {"total": 0, "by_severity": {}, "by_type": {}}
+        enriched_results = []
+
+    monkeypatch.setattr(cli, "run_lifecycle", lambda **_kwargs: DummyResult())
+    monkeypatch.setattr(cli, "dump_result", lambda _result: '{"ok": true}')
+
+    assert cli.cmd_e2e(args) == 0
+    assert attempts[0]["tcp_ports"] == []
+    assert attempts[1]["tcp_ports"] == [21, 22, 80, 139, 445, 3306]
+    assert "falling back to bundled metasploitable service ports" in capsys.readouterr().err
+
+
 def test_cmd_e2e_passes_custom_scan_config_and_ports(monkeypatch, tmp_path):
     parser = build_parser()
     output_path = tmp_path / "result.json"

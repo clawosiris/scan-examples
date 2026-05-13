@@ -86,7 +86,7 @@ This command:
 
 While it runs, the CLI now emits step-by-step progress logs to stderr (handy in CI), pretty-prints the enriched findings in the log, and writes final JSON that includes both raw `results` and `enriched_results` plus a `findings_summary` block with grouped counts by severity and type.
 
-The bundled target is `kirscht/metasploitable3-ub1404` with FTP, SSH, HTTP, SMB, and MySQL enabled. By default the e2e flow now uses the scan config's default ports. If you want a custom target port set, pass `--tcp-ports` (or set `TARGET_TCP_PORTS`) and the example will generate an override port list for scannerctl.
+The bundled target is `kirscht/metasploitable3-ub1404` with FTP, SSH, HTTP, SMB, and MySQL enabled. By default the e2e flow tries to use the scan config's default ports. If the feed does not include the referenced default port-list XML, the example falls back to the bundled metasploitable service ports `21,22,80,139,445,3306` so local runs and CI stay stable. If you want a custom target port set, pass `--tcp-ports` (or set `TARGET_TCP_PORTS`) and the example will generate an override port list for scannerctl.
 
 The enrichment step uses `vt-metadata.json` from the mounted vulnerability-test feed. The code checks both `<VT_PATH>/vt-metadata.json` and `<VT_PATH>/nasl/vt-metadata.json`. If the file is unavailable, malformed, or shaped unexpectedly, the workflow still returns raw results and marks enrichment as unavailable instead of faceplanting.
 
