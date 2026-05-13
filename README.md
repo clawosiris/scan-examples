@@ -39,6 +39,7 @@ Supported environment variables:
 - `SCANNERCTL_BIN` — path to `scannerctl`
 - `SCAN_CONFIG` — scan config to convert (defaults to `full-and-fast`)
 - `TARGET_TCP_PORTS` — optional comma-separated TCP ports for the target definition; omit it to use the scan config defaults
+- `TARGET_SSH_USERNAME` / `TARGET_SSH_PASSWORD` / `TARGET_SSH_PORT` — SSH credentials to include in the scan target definition (defaults: `msfadmin` / `msfadmin` / `22` for the bundled target)
 - `WAIT_BEFORE_RESULTS` — initial delay before polling for scan results in the `e2e` flow
 - `RESULTS_TIMEOUT` / `RESULTS_POLL_INTERVAL` — controls for waiting until findings appear
 - `CREATE_SCAN_RETRIES` / `CREATE_SCAN_RETRY_DELAY` — API warm-up retry controls for scan creation
@@ -86,7 +87,7 @@ This command:
 
 While it runs, the CLI now emits step-by-step progress logs to stderr (handy in CI), pretty-prints the enriched findings in the log, and writes final JSON that includes the final scan status, raw `results`, `enriched_results`, and a `findings_summary` block with grouped counts by severity and type.
 
-The bundled target is `kirscht/metasploitable3-ub1404` with FTP, SSH, HTTP, SMB, and MySQL enabled. By default the e2e flow tries to use the scan config's default ports. If the feed does not include the referenced default port-list XML, the example falls back to the bundled metasploitable service ports `21,22,80,139,445,3306` so local runs and CI stay stable. If you want a custom target port set, pass `--tcp-ports` (or set `TARGET_TCP_PORTS`) and the example will generate an override port list for scannerctl.
+The bundled target is `kirscht/metasploitable3-ub1404` with FTP, SSH, HTTP, SMB, and MySQL enabled. Compose explicitly sets the target password to `msfadmin`, and the e2e flow includes the matching SSH credential (`msfadmin` / `msfadmin` on port `22`) in the converted scan target so authenticated SSH checks can run. By default the e2e flow tries to use the scan config's default ports. If the feed does not include the referenced default port-list XML, the example falls back to the bundled metasploitable service ports `21,22,80,139,445,3306` so local runs and CI stay stable. If you want a custom target port set, pass `--tcp-ports` (or set `TARGET_TCP_PORTS`) and the example will generate an override port list for scannerctl.
 
 The e2e completion behavior is controlled by `--completion-mode` / `E2E_COMPLETION_MODE`:
 
@@ -117,6 +118,8 @@ Use a different scan config or explicit ports if you want to override the defaul
 docker compose run --rm \
   -e SCAN_CONFIG=full-and-fast \
   -e TARGET_TCP_PORTS=21,22,80,139,445,3306 \
+  -e TARGET_SSH_USERNAME=msfadmin \
+  -e TARGET_SSH_PASSWORD=msfadmin \
   example e2e --host target
 ```
 

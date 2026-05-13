@@ -45,6 +45,9 @@ def test_build_parser_supports_e2e_command():
     assert args.completion_mode == "first-results"
     assert args.scan_config == "full-and-fast"
     assert args.tcp_ports is None
+    assert args.ssh_username == "msfadmin"
+    assert args.ssh_password == "msfadmin"
+    assert args.ssh_port == 22
 
 
 def test_cmd_e2e_logs_default_ports_and_scan_config(monkeypatch, capsys, tmp_path):
@@ -85,6 +88,7 @@ def test_cmd_e2e_logs_default_ports_and_scan_config(monkeypatch, capsys, tmp_pat
     captured = capsys.readouterr()
     assert "[e2e] Scanning TCP ports: default ports from the scan config" in captured.err
     assert "[e2e] Using scan config: full-and-fast" in captured.err
+    assert "[e2e] Using SSH credential for msfadmin@target:22" in captured.err
     assert "[e2e] Enriched findings:" in captured.err
     assert Path(output_path).read_text(encoding="utf-8") == '{"ok": true}\n'
 
@@ -122,6 +126,9 @@ def test_cmd_e2e_falls_back_to_bundled_ports_when_feed_default_portlist_is_missi
 
     assert cli.cmd_e2e(args) == 0
     assert attempts[0]["tcp_ports"] == []
+    assert attempts[0]["ssh_username"] == "msfadmin"
+    assert attempts[0]["ssh_password"] == "msfadmin"
+    assert attempts[0]["ssh_port"] == 22
     assert attempts[1]["tcp_ports"] == [21, 22, 80, 139, 445, 3306]
     assert "falling back to bundled metasploitable service ports" in capsys.readouterr().err
 
@@ -137,6 +144,12 @@ def test_cmd_e2e_passes_custom_scan_config_and_ports(monkeypatch, tmp_path):
         "custom-scan",
         "--tcp-ports",
         "22,80,445",
+        "--ssh-username",
+        "custom-user",
+        "--ssh-password",
+        "custom-pass",
+        "--ssh-port",
+        "2222",
         "--output",
         str(output_path),
     ])
@@ -162,6 +175,9 @@ def test_cmd_e2e_passes_custom_scan_config_and_ports(monkeypatch, tmp_path):
     assert cli.cmd_e2e(args) == 0
     assert captured["scan_config"] == "custom-scan"
     assert captured["tcp_ports"] == [22, 80, 445]
+    assert captured["ssh_username"] == "custom-user"
+    assert captured["ssh_password"] == "custom-pass"
+    assert captured["ssh_port"] == 2222
 
 
 def test_cmd_results_emits_enriched_json(monkeypatch, capsys):

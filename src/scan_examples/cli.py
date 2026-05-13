@@ -14,6 +14,9 @@ from .feed import dump_pretty_enriched_results, enrich_results, load_vt_metadata
 
 
 E2E_FALLBACK_TCP_PORTS = [21, 22, 80, 139, 445, 3306]
+DEFAULT_TARGET_SSH_USERNAME = "msfadmin"
+DEFAULT_TARGET_SSH_PASSWORD = "msfadmin"
+DEFAULT_TARGET_SSH_PORT = 22
 
 
 def _non_negative_float(raw: str) -> float:
@@ -68,6 +71,9 @@ def _convert_with_fallback(
     hosts: list[str],
     scan_config: str,
     tcp_ports: list[int],
+    ssh_username: str | None,
+    ssh_password: str | None,
+    ssh_port: int,
     scannerctl_bin: str,
     progress: Callable[[str], None] | None = None,
 ):
@@ -77,6 +83,9 @@ def _convert_with_fallback(
             hosts=hosts,
             scan_config=scan_config,
             tcp_ports=tcp_ports,
+            ssh_username=ssh_username,
+            ssh_password=ssh_password,
+            ssh_port=ssh_port,
             scannerctl_bin=scannerctl_bin,
         )
     except FileNotFoundError:
@@ -92,6 +101,9 @@ def _convert_with_fallback(
             hosts=hosts,
             scan_config=scan_config,
             tcp_ports=E2E_FALLBACK_TCP_PORTS,
+            ssh_username=ssh_username,
+            ssh_password=ssh_password,
+            ssh_port=ssh_port,
             scannerctl_bin=scannerctl_bin,
         )
 
@@ -104,6 +116,9 @@ def cmd_convert(args: argparse.Namespace) -> int:
         hosts=args.host,
         scan_config=args.scan_config,
         tcp_ports=_parse_ports(args.tcp_ports),
+        ssh_username=args.ssh_username,
+        ssh_password=args.ssh_password,
+        ssh_port=args.ssh_port,
         scannerctl_bin=args.scannerctl_bin,
     )
     _dump_json(payload, args.output)
@@ -161,6 +176,10 @@ def cmd_e2e(args: argparse.Namespace) -> int:
     progress(f"Target hosts: {', '.join(args.host)}")
     progress(f"Scanning TCP ports: {ports_rendered}")
     progress(f"Using scan config: {args.scan_config}")
+    if args.ssh_username and args.ssh_password:
+        progress(f"Using SSH credential for {args.ssh_username}@{', '.join(args.host)}:{args.ssh_port}")
+    else:
+        progress("No SSH credential configured for the target")
     progress("Discovering Greenbone community feed layout")
     layout = discover_feed_layout(args.data_objects_path, args.vt_path)
     vt_index = _load_vt_index_for_cli(layout.vt_path, progress=progress)
@@ -170,6 +189,9 @@ def cmd_e2e(args: argparse.Namespace) -> int:
         hosts=args.host,
         scan_config=args.scan_config,
         tcp_ports=tcp_ports,
+        ssh_username=args.ssh_username,
+        ssh_password=args.ssh_password,
+        ssh_port=args.ssh_port,
         scannerctl_bin=args.scannerctl_bin,
         progress=progress,
     )
@@ -257,6 +279,22 @@ def build_parser() -> argparse.ArgumentParser:
             "--tcp-ports",
             default=os.environ.get("TARGET_TCP_PORTS"),
             help="Comma-separated list of TCP ports for the target; omit to use the scan config defaults",
+        )
+        command.add_argument(
+            "--ssh-username",
+            default=os.environ.get("TARGET_SSH_USERNAME", DEFAULT_TARGET_SSH_USERNAME),
+            help="SSH username to include in the scan target credentials",
+        )
+        command.add_argument(
+            "--ssh-password",
+            default=os.environ.get("TARGET_SSH_PASSWORD", DEFAULT_TARGET_SSH_PASSWORD),
+            help="SSH password to include in the scan target credentials",
+        )
+        command.add_argument(
+            "--ssh-port",
+            type=int,
+            default=int(os.environ.get("TARGET_SSH_PORT", str(DEFAULT_TARGET_SSH_PORT))),
+            help="SSH port to include in the scan target credentials",
         )
         if include_output:
             command.add_argument("--output", help="Write JSON output to a file")

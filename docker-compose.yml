@@ -118,6 +118,7 @@ services:
     hostname: target
     entrypoint: /entrypoint.sh
     environment:
+      PASS: msfadmin
       FTP: "yes"
       HTTP: "yes"
       SMB: "yes"
@@ -136,6 +137,9 @@ services:
       SCANNER_API_URL: http://openvasd:80
       DATA_OBJECTS_PATH: /feed/data-objects
       VT_PATH: /feed/vulnerability-tests
+      TARGET_SSH_USERNAME: msfadmin
+      TARGET_SSH_PASSWORD: msfadmin
+      TARGET_SSH_PORT: 22
     volumes:
       - data_objects_vol:/feed/data-objects:ro
       - vt_data_vol:/feed/vulnerability-tests:ro
