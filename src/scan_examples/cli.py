@@ -119,7 +119,7 @@ def cmd_e2e(args: argparse.Namespace) -> int:
         print(f"[e2e] {message}", file=sys.stderr, flush=True)
 
     tcp_ports = _parse_ports(args.tcp_ports)
-    ports_rendered = ", ".join(str(port) for port in tcp_ports) if tcp_ports else "default port list from feed"
+    ports_rendered = ", ".join(str(port) for port in tcp_ports) if tcp_ports else "default ports from the scan config"
     progress(f"Target hosts: {', '.join(args.host)}")
     progress(f"Scanning TCP ports: {ports_rendered}")
     progress(f"Using scan config: {args.scan_config}")
@@ -216,7 +216,7 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument(
             "--tcp-ports",
             default=os.environ.get("TARGET_TCP_PORTS"),
-            help="Comma-separated list of TCP ports for the target; omit to use the feed default port list",
+            help="Comma-separated list of TCP ports for the target; omit to use the scan config defaults",
         )
         if include_output:
             command.add_argument("--output", help="Write JSON output to a file")

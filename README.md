@@ -38,7 +38,7 @@ Supported environment variables:
 - `VT_PATH` — mounted community `vulnerability-tests` feed path (used for both NASL content and `vt-metadata.json` enrichment lookups)
 - `SCANNERCTL_BIN` — path to `scannerctl`
 - `SCAN_CONFIG` — scan config to convert (defaults to `full-and-fast`)
-- `TARGET_TCP_PORTS` — optional comma-separated TCP ports for the target definition; omit it to use the feed's default port list
+- `TARGET_TCP_PORTS` — optional comma-separated TCP ports for the target definition; omit it to use the scan config defaults
 - `WAIT_BEFORE_RESULTS` — initial delay before polling for scan results in the `e2e` flow
 - `RESULTS_TIMEOUT` / `RESULTS_POLL_INTERVAL` — controls for waiting until findings appear
 - `CREATE_SCAN_RETRIES` / `CREATE_SCAN_RETRY_DELAY` — API warm-up retry controls for scan creation
@@ -86,7 +86,7 @@ This command:
 
 While it runs, the CLI now emits step-by-step progress logs to stderr (handy in CI), pretty-prints the enriched findings in the log, and writes final JSON that includes both raw `results` and `enriched_results` plus a `findings_summary` block with grouped counts by severity and type.
 
-The bundled target is `kirscht/metasploitable3-ub1404` with FTP, SSH, HTTP, SMB, and MySQL enabled. By default the e2e flow now uses the feed's default port list. If you want a custom target port set, pass `--tcp-ports` (or set `TARGET_TCP_PORTS`) and the example will generate an override port list for scannerctl.
+The bundled target is `kirscht/metasploitable3-ub1404` with FTP, SSH, HTTP, SMB, and MySQL enabled. By default the e2e flow now uses the scan config's default ports. If you want a custom target port set, pass `--tcp-ports` (or set `TARGET_TCP_PORTS`) and the example will generate an override port list for scannerctl.
 
 The enrichment step uses `vt-metadata.json` from the mounted vulnerability-test feed. The code checks both `<VT_PATH>/vt-metadata.json` and `<VT_PATH>/nasl/vt-metadata.json`. If the file is unavailable, malformed, or shaped unexpectedly, the workflow still returns raw results and marks enrichment as unavailable instead of faceplanting.
 

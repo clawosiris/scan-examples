@@ -14,10 +14,6 @@ SCAN_CONFIG_ALIASES = {
         "full-and-fast.xml",
     ],
 }
-OPENVAS_DEFAULT_PORTLIST_FILENAMES = [
-    "openvas-default-c7e03b6c-3bbe-11e1-a057-406186ea4fc5.xml",
-    "openvas-default.xml",
-]
 
 
 class ScanConfigConversionError(RuntimeError):
@@ -53,17 +49,12 @@ def discover_feed_layout(data_objects_path: str | os.PathLike[str], vt_path: str
 
 
 def build_target_payload(hosts: list[str], tcp_ports: list[int] | None = None) -> dict[str, Any]:
-    port_ranges = []
+    target: dict[str, Any] = {"hosts": hosts}
     if tcp_ports:
-        for port in tcp_ports:
-            port_ranges.append({"start": int(port)})
-    return {
-        "target": {
-            "hosts": hosts,
-            "ports": [{"protocol": "tcp", "range": port_ranges}] if port_ranges else [],
-        },
-        "vts": [],
-    }
+        target["ports"] = [
+            {"protocol": "tcp", "range": [{"start": int(port)} for port in tcp_ports]}
+        ]
+    return {"target": target, "vts": []}
 
 
 def _write_portlist_xml(tcp_ports: list[int]) -> Path:
@@ -130,14 +121,10 @@ def convert_scan_config(
 ) -> dict[str, Any]:
     scan_config_path = _resolve_scan_config_path(layout, scan_config)
     generated_portlist: Path | None = None
+    portlist: Path | None = None
     if tcp_ports:
         generated_portlist = _write_portlist_xml(tcp_ports)
         portlist = generated_portlist
-    else:
-        try:
-            portlist = _first_existing(layout.data_objects_path, OPENVAS_DEFAULT_PORTLIST_FILENAMES)
-        except FileNotFoundError:
-            portlist = None
     base_payload = build_target_payload(hosts, tcp_ports=tcp_ports)
 
     try:

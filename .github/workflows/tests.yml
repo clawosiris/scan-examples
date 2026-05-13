@@ -36,7 +36,7 @@ jobs:
         run: docker compose build --pull example
       - name: Start community scanner stack and target
         run: docker compose up -d vulnerability-tests notus-data data-objects gpg-data redis-server configure-openvas openvasd target
-      - name: Run end-to-end Full & Fast test with feed default ports
+      - name: Run end-to-end Full & Fast test with scan-config default ports
         run: docker compose run --rm -v "$PWD/artifacts:/artifacts" -e SCAN_CONFIG=full-and-fast example e2e --host target --wait-before-results 45 --results-timeout 1800 --results-poll-interval 30 --output /artifacts/scan-results.json
       - name: Collect compose logs
         if: always()

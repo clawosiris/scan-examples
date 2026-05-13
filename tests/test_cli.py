@@ -81,7 +81,7 @@ def test_cmd_e2e_logs_default_ports_and_scan_config(monkeypatch, capsys, tmp_pat
     assert cli.cmd_e2e(args) == 0
 
     captured = capsys.readouterr()
-    assert "[e2e] Scanning TCP ports: default port list from feed" in captured.err
+    assert "[e2e] Scanning TCP ports: default ports from the scan config" in captured.err
     assert "[e2e] Using scan config: full-and-fast" in captured.err
     assert "[e2e] Enriched findings:" in captured.err
     assert Path(output_path).read_text(encoding="utf-8") == '{"ok": true}\n'

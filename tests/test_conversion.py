@@ -13,6 +13,12 @@ def test_build_target_payload_includes_ports():
     assert payload["target"]["ports"][0]["range"] == [{"start": 22}, {"start": 80}]
 
 
+def test_build_target_payload_omits_ports_without_override():
+    payload = build_target_payload(["target.local"], tcp_ports=None)
+
+    assert payload["target"] == {"hosts": ["target.local"]}
+
+
 def test_discover_feed_layout_resolves_nested_vt_path(tmp_path):
     vt_root = tmp_path / "vulnerability-tests"
     nested = vt_root / "24.10" / "vt-data" / "nasl"
@@ -102,17 +108,14 @@ def test_convert_full_and_fast_generates_portlist_from_tcp_ports(tmp_path, monke
     assert captured["input"]["target"]["ports"][0]["range"] == [{"start": 80}]
 
 
-def test_convert_scan_config_uses_feed_default_portlist_without_tcp_ports(tmp_path, monkeypatch):
+def test_convert_scan_config_uses_scan_default_ports_without_tcp_ports(tmp_path, monkeypatch):
     data_objects = tmp_path / "data-objects"
     vt_path = tmp_path / "vulnerability-tests"
     scan_configs = data_objects / "scan-configs"
-    port_lists = data_objects / "port-lists"
     scan_configs.mkdir(parents=True)
-    port_lists.mkdir(parents=True)
     vt_path.mkdir(parents=True)
 
     (scan_configs / "full-and-fast-daba56c8-73ec-11df-a475-002264764cea.xml").write_text("scan-config")
-    (port_lists / "openvas-default-c7e03b6c-3bbe-11e1-a057-406186ea4fc5.xml").write_text("port-list")
 
     captured = {}
 
@@ -138,8 +141,8 @@ def test_convert_scan_config_uses_feed_default_portlist_without_tcp_ports(tmp_pa
 
     assert payload["vts"] == [{"oid": "1.2.3"}]
     assert captured["command"][0] == "scannerctl"
-    assert "-l" in captured["command"]
-    assert captured["input"]["target"]["ports"] == []
+    assert "-l" not in captured["command"]
+    assert "ports" not in captured["input"]["target"]
 
 
 def test_convert_scan_config_retries_with_legacy_scannerctl_cli(tmp_path, monkeypatch):
@@ -192,8 +195,6 @@ def test_convert_scan_config_resolves_named_scan_config(tmp_path, monkeypatch):
     vt_path.mkdir(parents=True)
 
     (scan_configs / "custom-scan.xml").write_text("scan-config")
-    (data_objects / "port-lists").mkdir(parents=True)
-    ((data_objects / "port-lists") / "openvas-default-c7e03b6c-3bbe-11e1-a057-406186ea4fc5.xml").write_text("port-list")
 
     captured = {}
 
