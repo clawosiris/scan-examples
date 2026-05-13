@@ -44,7 +44,7 @@ Supported environment variables:
 - `TARGET_SSH_USERNAME` / `TARGET_SSH_PASSWORD` / `TARGET_SSH_PORT` — SSH credentials to include in the scan target definition (defaults: `msfadmin` / `msfadmin` / `22` for the bundled target)
 - `WAIT_BEFORE_RESULTS` — initial delay before polling for scan results in the `e2e` flow
 - `RESULTS_TIMEOUT` / `RESULTS_POLL_INTERVAL` — controls for waiting until findings appear
-- `E2E_MIN_RESULTS` — minimum result count for `first-results` mode; CI uses `250`
+- `E2E_MIN_RESULTS` — minimum result count for `first-results` mode; CI uses `1000`
 - `CREATE_SCAN_RETRIES` / `CREATE_SCAN_RETRY_DELAY` — API warm-up retry controls for scan creation
 
 ## CLI commands
@@ -180,7 +180,7 @@ The e2e completion behavior is controlled by `--completion-mode` / `E2E_COMPLETI
 
 - `first-results` (default): quick validation for commits and PRs; stop once the configured minimum
   number of findings is available. Use `--min-results` / `E2E_MIN_RESULTS` to raise that threshold;
-  CI waits for the first 250 results.
+  CI waits for the first 1000 results.
 - `scan-complete`: full validation for pushes to `main`; keep polling status and results until the scan finishes successfully.
 
 For long-running CI scans, `--no-findings-increment-timeout` / `E2E_NO_FINDINGS_INCREMENT_TIMEOUT` can stop a still-running scan after the finding count has not increased for the configured number of seconds. CI sets this to 1500 seconds (25 minutes) for `main` push scans, keeping the findings collected so far and avoiding a long tail where OpenVAS keeps running without producing new results. Set it to `0` to disable the idle heuristic.

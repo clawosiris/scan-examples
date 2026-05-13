@@ -75,7 +75,7 @@ jobs:
             results_timeout="1800"
             no_findings_increment_timeout="0"
           fi
-          min_results="250"
+          min_results="1000"
           echo "Using e2e completion mode: ${completion_mode}"
           echo "Using minimum first-results count: ${min_results}"
           echo "Using no-findings-increment timeout: ${no_findings_increment_timeout}s"
