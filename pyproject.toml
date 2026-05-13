@@ -17,6 +17,9 @@ dependencies = [
 dev = [
   "pytest>=8.2.0,<9",
 ]
+python-gvm = [
+  "python-gvm>=26.3.0,<28",
+]
 
 [project.scripts]
 openvas-example = "scan_examples.cli:main"

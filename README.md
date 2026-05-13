@@ -9,6 +9,7 @@ MIT. See `LICENSE`.
 ## What is in this repo?
 
 - Python CLI example for the OpenVAS scanner REST API
+- Optional `python-gvm`-backed client path for the same scanner API
 - `scannerctl` based conversion of feed scan configs into scan JSON, plus direct custom scan JSON payloads
 - Docker image for the example CLI
 - Docker Compose environment with:
@@ -16,6 +17,28 @@ MIT. See `LICENSE`.
   - `openvasd` REST API plus the required `ospd-openvas` scanner service/socket wiring
   - a `kirscht/metasploitable3-ub1404` target container for end-to-end scans
 - Unit tests and a self-hosted GitHub Actions workflow for end-to-end validation
+
+## Client backends
+
+The CLI can now talk to the scanner API through two client implementations:
+
+- `requests` — the existing lightweight local client (default)
+- `python-gvm` — upstream Python client support for `openvasd v1`
+
+Use `--client-backend` (or `SCANNER_CLIENT_BACKEND`) to switch between them:
+
+```bash
+openvas-example e2e --client-backend requests --host target
+openvas-example e2e --client-backend python-gvm --host target
+```
+
+For the optional backend, install the extra dependency:
+
+```bash
+pip install .[python-gvm]
+```
+
+Current limitation: in this repo, the `python-gvm` backend is currently wired for the plain HTTP scanner endpoint used by the bundled Compose setup. HTTPS/mTLS flags are not plumbed through yet.
 
 ## Configuration
 
@@ -66,6 +89,7 @@ openvas-example convert-config \
 
 ```bash
 openvas-example create-scan scan.json
+openvas-example create-scan --client-backend python-gvm scan.json
 openvas-example start-scan <scan-id>
 openvas-example stop-scan <scan-id>
 openvas-example get-results <scan-id>
