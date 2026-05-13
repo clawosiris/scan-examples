@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .client import OpenVASScannerClient
-from .conversion import convert_full_and_fast, discover_feed_layout
+from .conversion import convert_scan_config, discover_feed_layout
 from .e2e import dump_result, run_lifecycle
 from .feed import dump_pretty_enriched_results, enrich_results, load_vt_metadata_index
 
@@ -61,9 +61,10 @@ def _load_vt_index_for_cli(vt_path: str, progress: Callable[[str], None] | None 
 
 def cmd_convert(args: argparse.Namespace) -> int:
     layout = discover_feed_layout(args.data_objects_path, args.vt_path)
-    payload = convert_full_and_fast(
+    payload = convert_scan_config(
         layout=layout,
         hosts=args.host,
+        scan_config=args.scan_config,
         tcp_ports=_parse_ports(args.tcp_ports),
         scannerctl_bin=args.scannerctl_bin,
     )
@@ -118,16 +119,18 @@ def cmd_e2e(args: argparse.Namespace) -> int:
         print(f"[e2e] {message}", file=sys.stderr, flush=True)
 
     tcp_ports = _parse_ports(args.tcp_ports)
-    ports_rendered = ", ".join(str(port) for port in tcp_ports) if tcp_ports else "default port list from scanner config"
+    ports_rendered = ", ".join(str(port) for port in tcp_ports) if tcp_ports else "default port list from feed"
     progress(f"Target hosts: {', '.join(args.host)}")
     progress(f"Scanning TCP ports: {ports_rendered}")
+    progress(f"Using scan config: {args.scan_config}")
     progress("Discovering Greenbone community feed layout")
     layout = discover_feed_layout(args.data_objects_path, args.vt_path)
     vt_index = _load_vt_index_for_cli(args.vt_path, progress=progress)
-    progress("Converting Full & Fast configuration with scannerctl")
-    payload = convert_full_and_fast(
+    progress("Converting scan configuration with scannerctl")
+    payload = convert_scan_config(
         layout=layout,
         hosts=args.host,
+        scan_config=args.scan_config,
         tcp_ports=tcp_ports,
         scannerctl_bin=args.scannerctl_bin,
     )
@@ -184,6 +187,13 @@ def build_parser() -> argparse.ArgumentParser:
             help="Path to the Greenbone VT feed",
         )
 
+    def add_scan_config_flag(command: argparse.ArgumentParser) -> None:
+        command.add_argument(
+            "--scan-config",
+            default=os.environ.get("SCAN_CONFIG", "full-and-fast"),
+            help="Scan configuration to convert (default: full-and-fast)",
+        )
+
     def add_shared_feed_flags(command: argparse.ArgumentParser, *, include_output: bool = True) -> None:
         command.add_argument(
             "--data-objects-path",
@@ -191,6 +201,7 @@ def build_parser() -> argparse.ArgumentParser:
             help="Path to the Greenbone data-objects feed",
         )
         add_vt_path_flag(command)
+        add_scan_config_flag(command)
         command.add_argument(
             "--scannerctl-bin",
             default=os.environ.get("SCANNERCTL_BIN", "scannerctl"),
@@ -204,15 +215,15 @@ def build_parser() -> argparse.ArgumentParser:
         )
         command.add_argument(
             "--tcp-ports",
-            default=os.environ.get("TARGET_TCP_PORTS", "21,22,80,139,445,3306"),
-            help="Comma-separated list of TCP ports for the example target",
+            default=os.environ.get("TARGET_TCP_PORTS"),
+            help="Comma-separated list of TCP ports for the target; omit to use the feed default port list",
         )
         if include_output:
             command.add_argument("--output", help="Write JSON output to a file")
 
     subparsers = parser.add_subparsers(dest="command")
 
-    convert = subparsers.add_parser("convert-config", help="Convert Full & Fast scan config to scan JSON")
+    convert = subparsers.add_parser("convert-config", help="Convert a scan config to scan JSON")
     add_shared_feed_flags(convert)
     convert.set_defaults(func=cmd_convert)
 

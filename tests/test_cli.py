@@ -41,35 +41,23 @@ def test_build_parser_supports_e2e_command():
     assert args.create_retries == 3
     assert args.results_timeout == 300
     assert args.results_poll_interval == 15
+    assert args.scan_config == "full-and-fast"
+    assert args.tcp_ports is None
 
 
-def test_build_parser_uses_metasploitable_port_defaults():
-    parser = build_parser()
-
-    args = parser.parse_args([
-        "e2e",
-        "--host",
-        "target",
-    ])
-
-    assert args.tcp_ports == "21,22,80,139,445,3306"
-
-
-def test_cmd_e2e_logs_scanned_ports_and_enriched_findings(monkeypatch, capsys, tmp_path):
+def test_cmd_e2e_logs_default_ports_and_scan_config(monkeypatch, capsys, tmp_path):
     parser = build_parser()
     output_path = tmp_path / "result.json"
     args = parser.parse_args([
         "e2e",
         "--host",
         "target",
-        "--tcp-ports",
-        "22,80,445",
         "--output",
         str(output_path),
     ])
 
     monkeypatch.setattr(cli, "discover_feed_layout", lambda *_args, **_kwargs: object())
-    monkeypatch.setattr(cli, "convert_full_and_fast", lambda **_kwargs: {"target": {}, "vts": []})
+    monkeypatch.setattr(cli, "convert_scan_config", lambda **_kwargs: {"target": {}, "vts": []})
     monkeypatch.setattr(cli, "_load_vt_index_for_cli", lambda _vt_path, progress=None: VT_INDEX)
 
     class DummyClient:
@@ -93,10 +81,48 @@ def test_cmd_e2e_logs_scanned_ports_and_enriched_findings(monkeypatch, capsys, t
     assert cli.cmd_e2e(args) == 0
 
     captured = capsys.readouterr()
-    assert "[e2e] Scanning TCP ports: 22, 80, 445" in captured.err
+    assert "[e2e] Scanning TCP ports: default port list from feed" in captured.err
+    assert "[e2e] Using scan config: full-and-fast" in captured.err
     assert "[e2e] Enriched findings:" in captured.err
-    assert '"vt_metadata_status": "matched"' in captured.err
     assert Path(output_path).read_text(encoding="utf-8") == '{"ok": true}\n'
+
+
+def test_cmd_e2e_passes_custom_scan_config_and_ports(monkeypatch, tmp_path):
+    parser = build_parser()
+    output_path = tmp_path / "result.json"
+    args = parser.parse_args([
+        "e2e",
+        "--host",
+        "target",
+        "--scan-config",
+        "custom-scan",
+        "--tcp-ports",
+        "22,80,445",
+        "--output",
+        str(output_path),
+    ])
+
+    captured = {}
+    monkeypatch.setattr(cli, "discover_feed_layout", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(cli, "_load_vt_index_for_cli", lambda _vt_path, progress=None: VT_INDEX)
+
+    def fake_convert_scan_config(**kwargs):
+        captured.update(kwargs)
+        return {"target": {}, "vts": []}
+
+    monkeypatch.setattr(cli, "convert_scan_config", fake_convert_scan_config)
+    monkeypatch.setattr(cli, "_build_client", lambda _args: object())
+
+    class DummyResult:
+        findings_summary = {"total": 0, "by_severity": {}, "by_type": {}}
+        enriched_results = []
+
+    monkeypatch.setattr(cli, "run_lifecycle", lambda **_kwargs: DummyResult())
+    monkeypatch.setattr(cli, "dump_result", lambda _result: '{"ok": true}')
+
+    assert cli.cmd_e2e(args) == 0
+    assert captured["scan_config"] == "custom-scan"
+    assert captured["tcp_ports"] == [22, 80, 445]
 
 
 def test_cmd_results_emits_enriched_json(monkeypatch, capsys):
@@ -122,7 +148,7 @@ def test_cmd_results_emits_enriched_json(monkeypatch, capsys):
     assert payload["enriched_results"][0]["vt_metadata"]["name"] == "Example VT"
 
 
-def test_load_vt_index_for_cli_soft_fails_on_invalid_json(capsys):
+def test_load_vt_index_for_cli_soft_fails_on_invalid_json():
     messages: list[str] = []
 
     def broken_loader(_vt_path):

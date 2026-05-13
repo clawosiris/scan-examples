@@ -9,7 +9,7 @@ MIT. See `LICENSE`.
 ## What is in this repo?
 
 - Python CLI example for the OpenVAS scanner REST API
-- `scannerctl` based conversion of the community feed's **Full & Fast** scan config into scan JSON
+- `scannerctl` based conversion of feed scan configs into scan JSON (defaults to **Full & Fast**)
 - Docker image for the example CLI
 - Docker Compose environment with:
   - Greenbone community feed containers
@@ -37,7 +37,8 @@ Supported environment variables:
 - `DATA_OBJECTS_PATH` — mounted community `data-objects` feed path
 - `VT_PATH` — mounted community `vulnerability-tests` feed path (used for both NASL content and `vt-metadata.json` enrichment lookups)
 - `SCANNERCTL_BIN` — path to `scannerctl`
-- `TARGET_TCP_PORTS` — default comma-separated TCP ports for the target definition (defaults to `21,22,80,139,445,3306` for the bundled metasploitable target)
+- `SCAN_CONFIG` — scan config to convert (defaults to `full-and-fast`)
+- `TARGET_TCP_PORTS` — optional comma-separated TCP ports for the target definition; omit it to use the feed's default port list
 - `WAIT_BEFORE_RESULTS` — initial delay before polling for scan results in the `e2e` flow
 - `RESULTS_TIMEOUT` / `RESULTS_POLL_INTERVAL` — controls for waiting until findings appear
 - `CREATE_SCAN_RETRIES` / `CREATE_SCAN_RETRY_DELAY` — API warm-up retry controls for scan creation
@@ -46,11 +47,12 @@ Supported environment variables:
 
 The Docker image and local package expose `openvas-example`.
 
-### Convert the Full & Fast configuration
+### Convert a scan configuration
 
 ```bash
 openvas-example convert-config \
   --host target \
+  --scan-config full-and-fast \
   --data-objects-path /feed/data-objects \
   --vt-path /feed/vulnerability-tests \
   --output scan.json
@@ -69,11 +71,11 @@ openvas-example delete-scan <scan-id>
 ### Run the end-to-end flow
 
 ```bash
-openvas-example e2e --host target --tcp-ports 21,22,80,139,445,3306
+openvas-example e2e --host target
 ```
 
 This command:
-1. Resolves the mounted feed layout and converts the feed's **Full & Fast** scan config with `scannerctl`
+1. Resolves the mounted feed layout and converts the requested scan config with `scannerctl` (default: **Full & Fast**)
 2. Retries scan creation while `openvasd` is still warming up
 3. Starts the scan
 4. Polls until findings appear in the results (or times out)
@@ -84,7 +86,7 @@ This command:
 
 While it runs, the CLI now emits step-by-step progress logs to stderr (handy in CI), pretty-prints the enriched findings in the log, and writes final JSON that includes both raw `results` and `enriched_results` plus a `findings_summary` block with grouped counts by severity and type.
 
-The bundled target is `kirscht/metasploitable3-ub1404` with FTP, SSH, HTTP, SMB, and MySQL enabled. The default scanned TCP port set is `21,22,80,139,445,3306`, which gives the example a realistic multi-service target for local runs and CI.
+The bundled target is `kirscht/metasploitable3-ub1404` with FTP, SSH, HTTP, SMB, and MySQL enabled. By default the e2e flow now uses the feed's default port list. If you want a custom target port set, pass `--tcp-ports` (or set `TARGET_TCP_PORTS`) and the example will generate an override port list for scannerctl.
 
 The enrichment step uses `vt-metadata.json` from the mounted vulnerability-test feed. The code checks both `<VT_PATH>/vt-metadata.json` and `<VT_PATH>/nasl/vt-metadata.json`. If the file is unavailable, malformed, or shaped unexpectedly, the workflow still returns raw results and marks enrichment as unavailable instead of faceplanting.
 
@@ -101,7 +103,16 @@ docker compose up -d vulnerability-tests notus-data data-objects gpg-data redis-
 Run the example container against that stack:
 
 ```bash
-docker compose run --rm example e2e --host target --tcp-ports 21,22,80,139,445,3306
+docker compose run --rm example e2e --host target
+```
+
+Use a different scan config or explicit ports if you want to override the defaults:
+
+```bash
+docker compose run --rm \
+  -e SCAN_CONFIG=full-and-fast \
+  -e TARGET_TCP_PORTS=21,22,80,139,445,3306 \
+  example e2e --host target
 ```
 
 ## Local development with uv
