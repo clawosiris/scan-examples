@@ -163,3 +163,20 @@ The repository SHALL provide a GitHub Actions workflow that validates the exampl
 - **AND** runs the e2e test in quick completion mode for pull requests and non-main pushes
 - **AND** runs the e2e test in full scan-completion mode for pushes to `main`
 - **AND** preserves logs or artifacts sufficient to debug failures.
+
+### Requirement: Feed synchronization via greenbone-feed-sync
+The repository SHALL synchronize required Greenbone feed content with `greenbone-feed-sync` instead of relying on dedicated community feed data-copy containers.
+
+#### Scenario: Compose synchronizes required feed data
+- **GIVEN** a developer or CI runner prepares the e2e Compose environment
+- **WHEN** feed synchronization is run
+- **THEN** the Compose environment uses the `registry.community.greenbone.net/community/greenbone-feed-sync` container
+- **AND** synchronizes NASL vulnerability tests, Notus data, and GVMD data objects
+- **AND** stores the synchronized data in persistent Docker named volumes reused by `ospd-openvas`, `openvasd`, and the example CLI
+- **AND** does not require the `vulnerability-tests`, `notus-data`, or `data-objects` feed data-copy services.
+
+#### Scenario: CI reuses synchronized feed volumes
+- **GIVEN** the self-hosted e2e GitHub Actions workflow runs repeatedly
+- **WHEN** the workflow prepares feed data
+- **THEN** it runs the feed-sync Compose service before starting the scanner stack
+- **AND** preserves the feed volumes during teardown so later runs can fetch feed deltas instead of repopulating the feeds from scratch.

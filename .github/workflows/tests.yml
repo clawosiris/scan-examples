@@ -54,8 +54,10 @@ jobs:
         run: mkdir -p artifacts
       - name: Build fresh example service image
         run: docker compose build --pull example
-      - name: Start community scanner stack and target
-        run: docker compose up -d vulnerability-tests notus-data data-objects gpg-data redis-server configure-openvas openvasd target
+      - name: Synchronize Greenbone feed data
+        run: docker compose up greenbone-feed-sync
+      - name: Start scanner stack and target
+        run: docker compose up -d gpg-data redis-server configure-openvas openvasd target
       - name: Run end-to-end custom scan config test
         run: |
           if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "${{ inputs.full_scan }}" == "true" ]]; then

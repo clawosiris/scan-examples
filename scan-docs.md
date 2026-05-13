@@ -469,6 +469,27 @@ table_driven_lsc = yes
 openvasd_server = https://0.0.0.0:8443
 ```
 
+
+### Compose Feed Sync Implementation
+
+This repository uses the `registry.community.greenbone.net/community/greenbone-feed-sync` container to populate persistent Docker named volumes instead of starting the dedicated community feed data-copy containers. The Compose service runs:
+
+```bash
+greenbone-feed-sync --type nasl
+greenbone-feed-sync --type notus
+greenbone-feed-sync --type gvmd-data
+```
+
+Those commands populate the volumes mounted by `ospd-openvas`, `openvasd`, and the example CLI:
+
+| Feed type | Volume | Feed-sync destination | Runtime mount |
+|---|---|---|---|
+| NASL vulnerability tests | `vt_data_vol` | `/var/lib/openvas/plugins` | `/var/lib/openvas/plugins`, `/feed/vulnerability-tests` |
+| Notus advisories | `notus_data_vol` | `/var/lib/notus` | `/var/lib/notus` |
+| GVMD data objects (scan configs, port lists, report formats) | `data_objects_vol` | `/var/lib/gvm/data-objects/gvmd` | `/feed/data-objects` |
+
+Keeping these volumes between CI runs lets rsync fetch only changed feed content on later runs.
+
 ### Docker Compose Examples
 
 #### 1. Feed on Volume Default
