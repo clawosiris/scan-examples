@@ -93,6 +93,14 @@ The repository SHALL provide example code that expands scanner results with meta
 - **AND** includes useful metadata in the enriched output such as VT name, filename, family, category, references, and selected tags when available
 - **AND** preserves the original scanner result fields alongside the enrichment data.
 
+#### Scenario: Enrich result by CVE from optional SCAP data
+- **GIVEN** a scanner result whose matched VT metadata references one or more CVE IDs
+- **AND** SCAP/NVD CVE JSON data is configured
+- **WHEN** the enrichment step processes that result
+- **THEN** it looks up the referenced CVE IDs in the SCAP CVE index
+- **AND** includes useful CVE metadata such as descriptions, timestamps, references, weaknesses, CVSS metrics, and affected CPEs when available
+- **AND** marks whether CVE metadata was matched, partially matched, unavailable, or not found.
+
 #### Scenario: Result has no matching VT metadata
 - **GIVEN** a scanner result whose OID is missing from the local VT metadata index or is absent entirely
 - **WHEN** the enrichment step processes that result
@@ -105,6 +113,12 @@ The repository SHALL provide example code that expands scanner results with meta
 - **WHEN** the CLI attempts to load enrichment data
 - **THEN** it continues without enrichment instead of failing the whole command
 - **AND** emits a brief user-visible message that enrichment was skipped.
+
+#### Scenario: SCAP data is unavailable or unreadable
+- **GIVEN** optional SCAP enrichment is configured but the local SCAP data is missing, unreadable, or malformed
+- **WHEN** the CLI attempts to load CVE enrichment data
+- **THEN** it continues with VT metadata enrichment instead of failing the whole command
+- **AND** emits a brief user-visible message that CVE enrichment was skipped.
 
 ### Requirement: End-to-end test coverage
 The repository SHALL include an end-to-end test that exercises the documented workflow against the Compose environment.
