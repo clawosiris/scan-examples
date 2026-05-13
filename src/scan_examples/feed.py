@@ -366,5 +366,19 @@ def enrich_results(
     return enriched
 
 
+def _format_enriched_result_for_log(enriched_result: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "result": enriched_result.get("result"),
+        "enrichment": {
+            "vt_metadata_status": enriched_result.get("vt_metadata_status"),
+            "vt_metadata": enriched_result.get("vt_metadata"),
+            "cve_ids": enriched_result.get("cve_ids", []),
+            "cve_metadata_status": enriched_result.get("cve_metadata_status", "no_cves"),
+            "cve_metadata": enriched_result.get("cve_metadata", []),
+        },
+    }
+
+
 def dump_pretty_enriched_results(enriched_results: list[dict[str, Any]]) -> str:
-    return json.dumps(enriched_results, indent=2, sort_keys=True)
+    log_payload = [_format_enriched_result_for_log(result) for result in enriched_results]
+    return json.dumps(log_payload, indent=2, sort_keys=True)

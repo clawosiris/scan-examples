@@ -168,10 +168,21 @@ def test_enrich_results_reports_missing_cve_metadata():
     assert enriched[0]["cve_metadata"] == []
 
 
-def test_dump_pretty_enriched_results_is_human_readable():
+def test_dump_pretty_enriched_results_includes_enrichment_data_for_logs():
     rendered = dump_pretty_enriched_results([
-        {"result": {"id": 1, "oid": "1.2.3"}, "vt_metadata_status": "not_found", "vt_metadata": None}
+        {
+            "result": {"id": 1, "oid": "1.2.3"},
+            "vt_metadata_status": "matched",
+            "vt_metadata": {"name": "Example VT"},
+            "cve_ids": ["CVE-2026-0001"],
+            "cve_metadata_status": "matched",
+            "cve_metadata": [{"id": "CVE-2026-0001", "descriptions": ["Example CVE"]}],
+        }
     ])
+    payload = json.loads(rendered)
 
-    assert '"vt_metadata_status": "not_found"' in rendered
+    assert payload[0]["result"] == {"id": 1, "oid": "1.2.3"}
+    assert payload[0]["enrichment"]["vt_metadata"] == {"name": "Example VT"}
+    assert payload[0]["enrichment"]["cve_ids"] == ["CVE-2026-0001"]
+    assert payload[0]["enrichment"]["cve_metadata"] == [{"id": "CVE-2026-0001", "descriptions": ["Example CVE"]}]
     assert rendered.startswith("[")
