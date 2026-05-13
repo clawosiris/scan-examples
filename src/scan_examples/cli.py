@@ -11,6 +11,7 @@ from .client import OpenVASScannerClient
 from .conversion import convert_scan_config, discover_feed_layout, load_custom_scan_config
 from .e2e import dump_result, run_lifecycle
 from .feed import dump_pretty_enriched_results, enrich_results, load_scap_cve_index, load_vt_metadata_index
+from .python_gvm_client import PythonGvmOpenvasdClient
 
 
 E2E_FALLBACK_TCP_PORTS = [21, 22, 80, 139, 445, 3306]
@@ -33,7 +34,10 @@ def _positive_int(raw: str) -> int:
     return value
 
 
-def _build_client(args: argparse.Namespace) -> OpenVASScannerClient:
+def _build_client(args: argparse.Namespace) -> OpenVASScannerClient | PythonGvmOpenvasdClient:
+    if args.client_backend == "python-gvm":
+        return PythonGvmOpenvasdClient(base_url=args.base_url)
+
     return OpenVASScannerClient(
         base_url=args.base_url,
         timeout=args.timeout,
@@ -280,6 +284,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.set_defaults(func=None)
 
     def add_shared_api_flags(command: argparse.ArgumentParser) -> None:
+        command.add_argument(
+            "--client-backend",
+            choices=["requests", "python-gvm"],
+            default=os.environ.get("SCANNER_CLIENT_BACKEND", "requests"),
+            help="Scanner API client implementation to use",
+        )
         command.add_argument(
             "--base-url",
             default=os.environ.get("SCANNER_API_URL", "http://openvasd:80"),

@@ -38,6 +38,7 @@ def test_build_parser_supports_e2e_command(monkeypatch):
     ])
 
     assert args.command == "e2e"
+    assert args.client_backend == "requests"
     assert args.host == ["target"]
     assert args.output == "result.json"
     assert args.create_retries == 3
@@ -53,6 +54,41 @@ def test_build_parser_supports_e2e_command(monkeypatch):
     assert args.ssh_username == "msfadmin"
     assert args.ssh_password == "msfadmin"
     assert args.ssh_port == 22
+
+
+def test_build_parser_accepts_python_gvm_backend(monkeypatch):
+    monkeypatch.delenv("SCAP_PATH", raising=False)
+    parser = build_parser()
+
+    args = parser.parse_args([
+        "create-scan",
+        "--client-backend",
+        "python-gvm",
+        "payload.json",
+    ])
+
+    assert args.command == "create-scan"
+    assert args.client_backend == "python-gvm"
+
+
+def test_build_client_selects_python_gvm_backend(monkeypatch):
+    args = SimpleNamespace(
+        client_backend="python-gvm",
+        base_url="http://openvasd:80",
+        timeout=30.0,
+        insecure=False,
+    )
+
+    class DummyPythonGvmClient:
+        def __init__(self, *, base_url):
+            self.base_url = base_url
+
+    monkeypatch.setattr(cli, "PythonGvmOpenvasdClient", DummyPythonGvmClient)
+
+    client = cli._build_client(args)
+
+    assert isinstance(client, DummyPythonGvmClient)
+    assert client.base_url == "http://openvasd:80"
 
 
 def test_cmd_e2e_logs_default_ports_and_scan_config(monkeypatch, capsys, tmp_path):
