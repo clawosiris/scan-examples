@@ -26,6 +26,13 @@ def _non_negative_float(raw: str) -> float:
     return value
 
 
+def _positive_int(raw: str) -> int:
+    value = int(raw)
+    if value < 1:
+        raise argparse.ArgumentTypeError("must be >= 1")
+    return value
+
+
 def _build_client(args: argparse.Namespace) -> OpenVASScannerClient:
     return OpenVASScannerClient(
         base_url=args.base_url,
@@ -252,6 +259,7 @@ def cmd_e2e(args: argparse.Namespace) -> int:
         results_poll_interval=args.results_poll_interval,
         no_findings_increment_timeout=args.no_findings_increment_timeout,
         completion_mode=args.completion_mode,
+        min_results=args.min_results,
         vt_index=vt_index,
         scap_cve_index=scap_cve_index,
         progress=progress,
@@ -437,6 +445,12 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["first-results", "scan-complete"],
         default=os.environ.get("E2E_COMPLETION_MODE", "first-results"),
         help="Stop after first findings for quick checks, or wait for natural scan completion",
+    )
+    e2e.add_argument(
+        "--min-results",
+        type=_positive_int,
+        default=_positive_int(os.environ.get("E2E_MIN_RESULTS", "1")),
+        help="For first-results mode, wait until at least this many results are returned",
     )
     e2e.set_defaults(func=cmd_e2e)
 

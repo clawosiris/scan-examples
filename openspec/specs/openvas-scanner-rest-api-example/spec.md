@@ -92,7 +92,8 @@ The repository SHALL provide example code that expands scanner results with meta
 - **THEN** it looks up the matching VT metadata entry by OID
 - **AND** includes useful metadata in the enriched output such as VT name, filename, family, category, references, and selected tags when available
 - **AND** preserves the original scanner result fields at the enriched result entry top level
-- **AND** adds enrichment data directly to each result entry rather than wrapping the raw result in a separate `result` object.
+- **AND** adds enrichment data directly to each result entry rather than wrapping the raw result in
+  a separate `result` object.
 
 #### Scenario: Enrich result by CVE from optional SCAP data
 - **GIVEN** a scanner result whose matched VT metadata references one or more CVE IDs
@@ -132,10 +133,12 @@ The repository SHALL include an end-to-end test that exercises the documented wo
 - **AND** pretty-prints enriched findings in the CI or terminal log
 - **AND** creates, starts, retrieves results for, and deletes a scan
 - **AND** supports a quick mode that stops the scan after initial findings are available
+- **AND** supports a configurable minimum result count before stopping in quick mode
 - **AND** supports a full mode that keeps polling until the scan reaches `succeeded` instead of stopping at initial findings
 - **AND** writes the lifecycle result payload in a stable machine-readable JSON format for automation and debugging
 - **AND** includes both raw `results` and `enriched_results`
-- **AND** keeps each `enriched_results` entry shaped like the original scanner result with added enrichment fields
+- **AND** keeps each `enriched_results` entry shaped like the original scanner result with added
+  enrichment fields
 - **AND** includes summary stats for the number of findings returned by the scan
 - **AND** fails if any lifecycle step cannot be completed.
 

@@ -99,7 +99,10 @@ def test_enrich_results_preserves_raw_result_shape_and_adds_metadata_fields():
     assert enriched[0]["id"] == raw_result["id"]
     assert enriched[0]["message"] == raw_result["message"]
     assert "result" not in enriched[0]
-    assert enriched[0]["vt-metadata"]["name"] == "Ghostscript 9.50 < 9.55.0 Sandbox Escape Vulnerability - Linux"
+    assert (
+        enriched[0]["vt-metadata"]["name"]
+        == "Ghostscript 9.50 < 9.55.0 Sandbox Escape Vulnerability - Linux"
+    )
     assert enriched[0]["vt-metadata-status"] == "matched"
 
 

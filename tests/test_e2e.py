@@ -64,7 +64,14 @@ def test_dump_result_is_machine_readable():
         stop_response={"status": "stopped"},
         final_status={"status": "stopped"},
         results=[{"id": 1, "type": "alarm"}],
-        enriched_results=[{"id": 1, "type": "alarm", "vt-metadata-status": "missing_oid", "vt-metadata": None}],
+        enriched_results=[
+            {
+                "id": 1,
+                "type": "alarm",
+                "vt-metadata-status": "missing_oid",
+                "vt-metadata": None,
+            }
+        ],
         findings_summary={"total": 1, "by_severity": {"unknown": 1}, "by_type": {"alarm": 1}},
         delete_response={"status": "deleted"},
     )
@@ -95,7 +102,15 @@ def test_summarize_results_counts_findings():
 
 
 def test_run_lifecycle_emits_progress_in_order(monkeypatch):
-    client = DummyClient(results_sequence=[[], [{"id": 1, "oid": "1.2.3", "type": "alarm", "severity": "high"}, {"id": 2, "type": "log", "cvss": 9.3}]])
+    client = DummyClient(
+        results_sequence=[
+            [],
+            [
+                {"id": 1, "oid": "1.2.3", "type": "alarm", "severity": "high"},
+                {"id": 2, "type": "log", "cvss": 9.3},
+            ],
+        ]
+    )
     messages: list[str] = []
     sleeps: list[float] = []
     monkeypatch.setattr("scan_examples.e2e.time.sleep", lambda seconds: sleeps.append(seconds))
@@ -134,11 +149,43 @@ def test_run_lifecycle_emits_progress_in_order(monkeypatch):
     ]
 
 
+def test_run_lifecycle_waits_for_minimum_first_results(monkeypatch):
+    initial_results = [
+        {"id": index, "type": "alarm", "severity": "high"} for index in range(1, 100)
+    ]
+    enough_results = [
+        {"id": index, "type": "alarm", "severity": "high"} for index in range(1, 101)
+    ]
+    client = DummyClient(results_sequence=[initial_results, enough_results])
+    messages: list[str] = []
+    sleeps: list[float] = []
+    monkeypatch.setattr("scan_examples.e2e.time.sleep", lambda seconds: sleeps.append(seconds))
+    monotonic_values = iter([0.0, 1.0, 2.0])
+    monkeypatch.setattr("scan_examples.e2e.time.monotonic", lambda: next(monotonic_values))
+
+    result = run_lifecycle(
+        client=client,
+        payload={"target": {}, "vts": []},
+        wait_before_results=0,
+        results_timeout=60,
+        results_poll_interval=5,
+        min_results=100,
+        progress=messages.append,
+    )
+
+    assert result.findings_summary["total"] == 100
+    assert sleeps == [5]
+    assert "Fetched 99 findings; waiting for at least 100 before retrying in 5s" in messages
+
+
 def test_run_lifecycle_can_wait_for_scan_completion(monkeypatch):
     client = DummyClient(
         results_sequence=[
             [{"id": 1, "oid": "1.2.3", "type": "alarm", "severity": "high"}],
-            [{"id": 1, "oid": "1.2.3", "type": "alarm", "severity": "high"}, {"id": 2, "type": "log"}],
+            [
+                {"id": 1, "oid": "1.2.3", "type": "alarm", "severity": "high"},
+                {"id": 2, "type": "log"},
+            ],
         ],
         status_sequence=[{"status": "running"}, {"status": "succeeded"}],
     )

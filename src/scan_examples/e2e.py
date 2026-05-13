@@ -137,6 +137,7 @@ def run_lifecycle(
     results_poll_interval: float = 15.0,
     no_findings_increment_timeout: float = 0.0,
     completion_mode: str = "first-results",
+    min_results: int = 1,
     vt_index: dict[str, dict[str, Any]] | None = None,
     scap_cve_index: dict[str, dict[str, Any]] | None = None,
     progress: ProgressCallback | None = None,
@@ -146,8 +147,12 @@ def run_lifecycle(
     results_timeout = max(results_timeout, 0)
     results_poll_interval = max(results_poll_interval, 0)
     no_findings_increment_timeout = max(no_findings_increment_timeout, 0)
+    min_results = max(int(min_results), 1)
     if completion_mode not in SCAN_COMPLETION_MODES:
-        raise ValueError(f"Unsupported completion mode {completion_mode!r}; expected one of {sorted(SCAN_COMPLETION_MODES)}")
+        expected_modes = sorted(SCAN_COMPLETION_MODES)
+        raise ValueError(
+            f"Unsupported completion mode {completion_mode!r}; expected one of {expected_modes}"
+        )
 
     scan_id: str | None = None
     start_response: Any = None
@@ -226,7 +231,7 @@ def run_lifecycle(
                         f"No increase in findings for {no_findings_increment_timeout:g}s; stopping scan {scan_id}",
                     )
                     break
-            elif results:
+            elif findings_count >= min_results:
                 final_status = client.get_scan_status(scan_id)
                 break
 
@@ -236,7 +241,17 @@ def run_lifecycle(
                     f"Timed out after {results_timeout:g}s waiting for {wait_target} for scan {scan_id}"
                 )
             if results and completion_mode == "scan-complete":
-                _emit(progress, f"Scan still running after {len(results)} findings; waiting {results_poll_interval:g}s before retrying")
+                _emit(
+                    progress,
+                    f"Scan still running after {len(results)} findings; "
+                    f"waiting {results_poll_interval:g}s before retrying",
+                )
+            elif results:
+                _emit(
+                    progress,
+                    f"Fetched {len(results)} findings; waiting for at least {min_results} "
+                    f"before retrying in {results_poll_interval:g}s",
+                )
             else:
                 _emit(progress, f"No findings yet; waiting {results_poll_interval:g}s before retrying")
             time.sleep(results_poll_interval)

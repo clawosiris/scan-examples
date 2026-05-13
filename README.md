@@ -44,6 +44,7 @@ Supported environment variables:
 - `TARGET_SSH_USERNAME` / `TARGET_SSH_PASSWORD` / `TARGET_SSH_PORT` — SSH credentials to include in the scan target definition (defaults: `msfadmin` / `msfadmin` / `22` for the bundled target)
 - `WAIT_BEFORE_RESULTS` — initial delay before polling for scan results in the `e2e` flow
 - `RESULTS_TIMEOUT` / `RESULTS_POLL_INTERVAL` — controls for waiting until findings appear
+- `E2E_MIN_RESULTS` — minimum result count for `first-results` mode; CI uses `100`
 - `CREATE_SCAN_RETRIES` / `CREATE_SCAN_RETRY_DELAY` — API warm-up retry controls for scan creation
 
 ## CLI commands
@@ -87,7 +88,14 @@ This command:
 7. Stops the scan after first findings in quick mode, or lets it finish naturally in full mode
 8. Deletes the scan
 
-While it runs, the CLI now emits step-by-step progress logs to stderr (handy in CI), pretty-prints the enriched findings in the log, and writes final JSON that includes the final scan status, raw `results`, `enriched_results`, and a `findings_summary` block with grouped counts by severity and type. Each `enriched_results` entry keeps the original scanner result fields at the top level and adds enrichment fields such as `vt-metadata`, `vt-metadata-status`, `cve-ids`, `cve-metadata`, and `cve-metadata-status`.
+While it runs, the CLI now emits step-by-step progress logs to stderr (handy in CI),
+pretty-prints the enriched findings in the log, and writes final JSON that includes
+the final scan status, raw `results`, `enriched_results`, and a `findings_summary`
+block with grouped counts by severity and type.
+
+Each `enriched_results` entry keeps the original scanner result fields at the top
+level and adds enrichment fields such as `vt-metadata`, `vt-metadata-status`,
+`cve-ids`, `cve-metadata`, and `cve-metadata-status`.
 
 The bundled target is `kirscht/metasploitable3-ub1404` with FTP, SSH, HTTP, SMB, and MySQL enabled. Compose explicitly sets the target password to `msfadmin`, and the e2e flow includes the matching SSH credential (`msfadmin` / `msfadmin` on port `22`) in the scan target so authenticated SSH checks can run. By default, scannerctl-based conversion tries to use the scan config's default ports. If the feed does not include the referenced default port-list XML, the example falls back to the bundled metasploitable service ports `21,22,80,139,445,3306` so local runs and CI stay stable. If you want a custom target port set, pass `--tcp-ports` (or set `TARGET_TCP_PORTS`); scannerctl conversion will generate an override port list, and custom JSON payloads will have their target ports replaced.
 
@@ -95,16 +103,26 @@ For custom scan configs, pass `--scan-config-json` or set `SCAN_CONFIG_JSON`. Th
 
 The e2e completion behavior is controlled by `--completion-mode` / `E2E_COMPLETION_MODE`:
 
-- `first-results` (default): quick validation for commits and PRs; stop once initial findings are available.
+- `first-results` (default): quick validation for commits and PRs; stop once the configured minimum
+  number of findings is available. Use `--min-results` / `E2E_MIN_RESULTS` to raise that threshold;
+  CI waits for the first 100 results.
 - `scan-complete`: full validation for pushes to `main`; keep polling status and results until the scan finishes successfully.
 
 For long-running CI scans, `--no-findings-increment-timeout` / `E2E_NO_FINDINGS_INCREMENT_TIMEOUT` can stop a still-running scan after the finding count has not increased for the configured number of seconds. CI sets this to 1500 seconds (25 minutes) for `main` push scans, keeping the findings collected so far and avoiding a long tail where OpenVAS keeps running without producing new results. Set it to `0` to disable the idle heuristic.
 
 The GitHub Actions workflow can also be triggered manually. Its inputs let you choose the completion mode, results timeout, and no-findings-increment timeout. Use the `full_scan` input for a manual full scan: it forces `scan-complete` mode and disables the no-findings idle timeout so the scan waits until OpenVAS reports natural completion.
 
-The enrichment step first uses `vt-metadata.json` from the mounted vulnerability-test feed. The code checks both `<VT_PATH>/vt-metadata.json` and `<VT_PATH>/nasl/vt-metadata.json`. If the file is unavailable, malformed, or shaped unexpectedly, the workflow still returns raw results and marks VT enrichment as unavailable on each enriched result entry instead of faceplanting.
+The enrichment step first uses `vt-metadata.json` from the mounted vulnerability-test feed.
+The code checks both `<VT_PATH>/vt-metadata.json` and `<VT_PATH>/nasl/vt-metadata.json`.
+If the file is unavailable, malformed, or shaped unexpectedly, the workflow still returns raw
+results and marks VT enrichment as unavailable on each enriched result entry instead of
+faceplanting.
 
-If `--scap-path` / `SCAP_PATH` points at SCAP/NVD CVE JSON data, enrichment then uses CVE references found in the matched VT metadata to attach CVE details such as descriptions, publication timestamps, references, CWE weaknesses, CVSS metrics, and affected CPEs. SCAP enrichment is optional; missing or unreadable SCAP data is logged and each enriched result entry marks CVE metadata as unavailable rather than failing the scan workflow.
+If `--scap-path` / `SCAP_PATH` points at SCAP/NVD CVE JSON data, enrichment then uses
+CVE references found in the matched VT metadata to attach CVE details such as descriptions,
+publication timestamps, references, CWE weaknesses, CVSS metrics, and affected CPEs.
+SCAP enrichment is optional; missing or unreadable SCAP data is logged and each enriched result
+entry marks CVE metadata as unavailable rather than failing the scan workflow.
 
 One gotcha we hit: `openvasd` does not actually run scans by itself in this community-container setup. The Compose stack also needs `ospd-openvas` plus the shared scanner socket volume, otherwise scans get created and then stall with the very helpful classic of “OSPD socket ... does not exist.”
 

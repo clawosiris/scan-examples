@@ -45,6 +45,7 @@ def test_build_parser_supports_e2e_command(monkeypatch):
     assert args.results_poll_interval == 15
     assert args.no_findings_increment_timeout == 0
     assert args.completion_mode == "first-results"
+    assert args.min_results == 1
     assert args.scan_config == "full-and-fast"
     assert args.scan_config_json is None
     assert args.scap_path is None
