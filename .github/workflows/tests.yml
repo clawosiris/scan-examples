@@ -36,8 +36,25 @@ jobs:
         run: docker compose build --pull example
       - name: Start community scanner stack and target
         run: docker compose up -d vulnerability-tests notus-data data-objects gpg-data redis-server configure-openvas openvasd target
-      - name: Run end-to-end Full & Fast multi-port test
-        run: docker compose run --rm -v "$PWD/artifacts:/artifacts" example e2e --host target --tcp-ports 21,22,80,139,445,3306 --wait-before-results 45 --results-timeout 1800 --results-poll-interval 30 --output /artifacts/scan-results.json
+      - name: Run end-to-end Full & Fast test with scan-config default ports
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]; then
+            completion_mode="scan-complete"
+            results_timeout="5400"
+          else
+            completion_mode="first-results"
+            results_timeout="1800"
+          fi
+          echo "Using e2e completion mode: ${completion_mode}"
+          docker compose run --rm \
+            -v "$PWD/artifacts:/artifacts" \
+            -e SCAN_CONFIG=full-and-fast \
+            -e E2E_COMPLETION_MODE="${completion_mode}" \
+            example e2e --host target \
+              --wait-before-results 45 \
+              --results-timeout "${results_timeout}" \
+              --results-poll-interval 30 \
+              --output /artifacts/scan-results.json
       - name: Collect compose logs
         if: always()
         run: docker compose logs --no-color > artifacts/docker-compose.log

@@ -136,7 +136,6 @@ services:
       SCANNER_API_URL: http://openvasd:80
       DATA_OBJECTS_PATH: /feed/data-objects
       VT_PATH: /feed/vulnerability-tests
-      TARGET_TCP_PORTS: 21,22,80,139,445,3306
     volumes:
       - data_objects_vol:/feed/data-objects:ro
       - vt_data_vol:/feed/vulnerability-tests:ro

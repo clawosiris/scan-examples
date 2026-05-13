@@ -16,6 +16,14 @@ def resolve_vt_metadata_path(vt_path: str | Path) -> Path:
     for candidate in candidates:
         if candidate.is_file():
             return candidate
+
+    recursive_matches = sorted(
+        (path for path in base.rglob(VT_METADATA_FILENAME) if path.is_file()),
+        key=lambda path: (len(path.parts), str(path)),
+    )
+    if recursive_matches:
+        return recursive_matches[0]
+
     raise FileNotFoundError(f"Could not find {VT_METADATA_FILENAME} under {base}")
 
 
