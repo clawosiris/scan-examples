@@ -7,7 +7,6 @@ from scan_examples.conversion import build_target_payload, convert_full_and_fast
 
 
 FULL_AND_FAST = "full-and-fast-daba56c8-73ec-11df-a475-002264764cea.xml"
-DISCOVERY = "discovery-8715c877-47a0-438d-98a3-27c7a6ab2196.xml"
 DEFAULT_PORTLIST = "openvas-default-c7e03b6c-3bbe-11e1-a057-406186ea4fc5.xml"
 
 
@@ -44,7 +43,6 @@ def test_convert_full_and_fast_invokes_scannerctl(tmp_path, monkeypatch):
     port_lists.mkdir(parents=True)
     vt_path.mkdir(parents=True)
 
-    (scan_configs / DISCOVERY).write_text("discovery")
     (scan_configs / FULL_AND_FAST).write_text("scan-config")
     (port_lists / DEFAULT_PORTLIST).write_text("port-list")
 
@@ -73,7 +71,6 @@ def test_convert_full_and_fast_invokes_scannerctl(tmp_path, monkeypatch):
     assert captured["command"][0] == "scannerctl"
     assert captured["input"]["target"]["hosts"] == ["example"]
     assert "-l" in captured["command"]
-    assert captured["command"][-2].endswith(DISCOVERY)
     assert captured["command"][-1].endswith(FULL_AND_FAST)
 
 
@@ -84,7 +81,6 @@ def test_convert_full_and_fast_generates_portlist_from_tcp_ports(tmp_path, monke
     scan_configs.mkdir(parents=True)
     vt_path.mkdir(parents=True)
 
-    (scan_configs / DISCOVERY).write_text("discovery")
     (scan_configs / FULL_AND_FAST).write_text("scan-config")
 
     captured = {}
@@ -115,7 +111,6 @@ def test_convert_full_and_fast_generates_portlist_from_tcp_ports(tmp_path, monke
     assert "-l" in captured["command"]
     assert "<start>80</start>" in captured["portlist_xml"]
     assert captured["input"]["target"]["ports"][0]["range"] == [{"start": 80}]
-    assert captured["command"][-2].endswith(DISCOVERY)
     assert captured["command"][-1].endswith(FULL_AND_FAST)
 
 
@@ -128,7 +123,6 @@ def test_convert_scan_config_uses_feed_default_portlist_without_tcp_ports(tmp_pa
     port_lists.mkdir(parents=True)
     vt_path.mkdir(parents=True)
 
-    (scan_configs / DISCOVERY).write_text("discovery")
     (scan_configs / FULL_AND_FAST).write_text("scan-config")
     (port_lists / DEFAULT_PORTLIST).write_text("port-list")
 
@@ -158,7 +152,6 @@ def test_convert_scan_config_uses_feed_default_portlist_without_tcp_ports(tmp_pa
     assert captured["command"][0] == "scannerctl"
     assert "-l" in captured["command"]
     assert "ports" not in captured["input"]["target"]
-    assert captured["command"][-2].endswith(DISCOVERY)
     assert captured["command"][-1].endswith(FULL_AND_FAST)
 
 
@@ -169,7 +162,6 @@ def test_convert_scan_config_retries_with_legacy_scannerctl_cli(tmp_path, monkey
     scan_configs.mkdir(parents=True)
     vt_path.mkdir(parents=True)
 
-    (scan_configs / DISCOVERY).write_text("discovery")
     (scan_configs / FULL_AND_FAST).write_text("scan-config")
 
     calls = []
@@ -203,7 +195,6 @@ def test_convert_scan_config_retries_with_legacy_scannerctl_cli(tmp_path, monkey
     assert payload["vts"] == [{"oid": "1.2.3"}]
     assert calls[0][2:4] == ["-i", "-p"]
     assert calls[1][2] == "-s"
-    assert calls[0][-2].endswith(DISCOVERY)
     assert calls[0][-1].endswith(FULL_AND_FAST)
 
 
