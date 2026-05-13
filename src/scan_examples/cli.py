@@ -10,7 +10,7 @@ from typing import Any, Callable
 from .client import OpenVASScannerClient
 from .conversion import convert_scan_config, discover_feed_layout, load_custom_scan_config
 from .e2e import dump_result, run_lifecycle
-from .feed import dump_pretty_enriched_results, enrich_results, load_vt_metadata_index
+from .feed import dump_pretty_enriched_results, enrich_results, load_scap_cve_index, load_vt_metadata_index
 
 
 E2E_FALLBACK_TCP_PORTS = [21, 22, 80, 139, 445, 3306]
@@ -46,6 +46,25 @@ def _parse_ports(raw: str | None) -> list[int]:
     if not raw:
         return []
     return [int(part.strip()) for part in raw.split(",") if part.strip()]
+
+
+def _load_scap_index_for_cli(scap_path: str | None, progress: Callable[[str], None] | None = None) -> dict[str, dict[str, Any]] | None:
+    if not scap_path:
+        return None
+    try:
+        paths, cve_index = load_scap_cve_index(scap_path)
+    except FileNotFoundError:
+        if progress is not None:
+            progress(f"SCAP data not found under {scap_path}; continuing without CVE enrichment")
+        return None
+    except (json.JSONDecodeError, ValueError, OSError) as exc:
+        if progress is not None:
+            progress(f"Failed to load SCAP CVE data from {scap_path}: {exc}; continuing without CVE enrichment")
+        return None
+
+    if progress is not None:
+        progress(f"Loaded {len(cve_index)} CVE records from {len(paths)} SCAP file(s)")
+    return cve_index
 
 
 def _load_vt_index_for_cli(vt_path: str, progress: Callable[[str], None] | None = None) -> dict[str, dict[str, Any]] | None:
@@ -160,11 +179,12 @@ def cmd_results(args: argparse.Namespace) -> int:
     client = _build_client(args)
     results = client.get_results(args.scan_id)
     vt_index = _load_vt_index_for_cli(args.vt_path)
+    scap_cve_index = _load_scap_index_for_cli(args.scap_path)
     _dump_json(
         {
             "scan_id": args.scan_id,
             "results": results,
-            "enriched_results": enrich_results(results, vt_index),
+            "enriched_results": enrich_results(results, vt_index, scap_cve_index),
         },
         args.output,
     )
@@ -197,6 +217,7 @@ def cmd_e2e(args: argparse.Namespace) -> int:
     progress("Discovering Greenbone community feed layout")
     layout = discover_feed_layout(args.data_objects_path, args.vt_path)
     vt_index = _load_vt_index_for_cli(layout.vt_path, progress=progress)
+    scap_cve_index = _load_scap_index_for_cli(args.scap_path, progress=progress)
     if args.scan_config_json:
         progress("Loading custom scan configuration JSON")
         payload = load_custom_scan_config(
@@ -231,6 +252,7 @@ def cmd_e2e(args: argparse.Namespace) -> int:
         results_poll_interval=args.results_poll_interval,
         completion_mode=args.completion_mode,
         vt_index=vt_index,
+        scap_cve_index=scap_cve_index,
         progress=progress,
     )
     progress(f"Findings summary: {json.dumps(result.findings_summary, sort_keys=True)}")
@@ -274,6 +296,13 @@ def build_parser() -> argparse.ArgumentParser:
             help="Path to the Greenbone VT feed",
         )
 
+    def add_scap_path_flag(command: argparse.ArgumentParser) -> None:
+        command.add_argument(
+            "--scap-path",
+            default=os.environ.get("SCAP_PATH"),
+            help="Optional path to Greenbone/NVD SCAP CVE JSON data for CVE enrichment",
+        )
+
     def add_scan_config_flag(command: argparse.ArgumentParser) -> None:
         command.add_argument(
             "--scan-config",
@@ -288,6 +317,7 @@ def build_parser() -> argparse.ArgumentParser:
             help="Path to the Greenbone data-objects feed",
         )
         add_vt_path_flag(command)
+        add_scap_path_flag(command)
         add_scan_config_flag(command)
         command.add_argument(
             "--scan-config-json",
@@ -353,6 +383,7 @@ def build_parser() -> argparse.ArgumentParser:
     results = subparsers.add_parser("get-results", help="Fetch scan results")
     add_shared_api_flags(results)
     add_vt_path_flag(results)
+    add_scap_path_flag(results)
     results.add_argument("scan_id")
     results.set_defaults(func=cmd_results)
 

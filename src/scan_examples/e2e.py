@@ -137,6 +137,7 @@ def run_lifecycle(
     results_poll_interval: float = 15.0,
     completion_mode: str = "first-results",
     vt_index: dict[str, dict[str, Any]] | None = None,
+    scap_cve_index: dict[str, dict[str, Any]] | None = None,
     progress: ProgressCallback | None = None,
 ) -> E2EResult:
     wait_before_results = max(wait_before_results, 0)
@@ -220,7 +221,7 @@ def run_lifecycle(
             raise RuntimeError(f"Scan {scan_id} completed without findings")
 
         findings_summary = summarize_results(results)
-        enriched_results = enrich_results(results, vt_index)
+        enriched_results = enrich_results(results, vt_index, scap_cve_index)
 
         if completion_mode == "first-results":
             _emit(progress, f"Stopping scan {scan_id}")

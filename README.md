@@ -36,6 +36,7 @@ Supported environment variables:
 - `SCANNER_API_TIMEOUT` — HTTP timeout in seconds
 - `DATA_OBJECTS_PATH` — mounted community `data-objects` feed path
 - `VT_PATH` — mounted community `vulnerability-tests` feed path (used for both NASL content and `vt-metadata.json` enrichment lookups)
+- `SCAP_PATH` — optional path to SCAP/NVD CVE JSON data for second-stage CVE enrichment after VT OID matching
 - `SCANNERCTL_BIN` — path to `scannerctl`
 - `SCAN_CONFIG` — scan config to convert with `scannerctl` (defaults to `full-and-fast`)
 - `SCAN_CONFIG_JSON` — path to a custom scanner API scan config JSON payload, or a `.zip` containing one JSON file; when set, the e2e flow skips `scannerctl` conversion and uses this payload as a template
@@ -97,7 +98,9 @@ The e2e completion behavior is controlled by `--completion-mode` / `E2E_COMPLETI
 - `first-results` (default): quick validation for commits and PRs; stop once initial findings are available.
 - `scan-complete`: full validation for pushes to `main`; keep polling status and results until the scan finishes successfully.
 
-The enrichment step uses `vt-metadata.json` from the mounted vulnerability-test feed. The code checks both `<VT_PATH>/vt-metadata.json` and `<VT_PATH>/nasl/vt-metadata.json`. If the file is unavailable, malformed, or shaped unexpectedly, the workflow still returns raw results and marks enrichment as unavailable instead of faceplanting.
+The enrichment step first uses `vt-metadata.json` from the mounted vulnerability-test feed. The code checks both `<VT_PATH>/vt-metadata.json` and `<VT_PATH>/nasl/vt-metadata.json`. If the file is unavailable, malformed, or shaped unexpectedly, the workflow still returns raw results and marks VT enrichment as unavailable instead of faceplanting.
+
+If `--scap-path` / `SCAP_PATH` points at SCAP/NVD CVE JSON data, enrichment then uses CVE references found in the matched VT metadata to attach CVE details such as descriptions, publication timestamps, references, CWE weaknesses, CVSS metrics, and affected CPEs. SCAP enrichment is optional; missing or unreadable SCAP data is logged and the result JSON marks CVE metadata as unavailable rather than failing the scan workflow.
 
 One gotcha we hit: `openvasd` does not actually run scans by itself in this community-container setup. The Compose stack also needs `ospd-openvas` plus the shared scanner socket volume, otherwise scans get created and then stall with the very helpful classic of “OSPD socket ... does not exist.”
 

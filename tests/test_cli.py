@@ -23,7 +23,8 @@ VT_INDEX = {
 }
 
 
-def test_build_parser_supports_e2e_command():
+def test_build_parser_supports_e2e_command(monkeypatch):
+    monkeypatch.delenv("SCAP_PATH", raising=False)
     parser = build_parser()
 
     args = parser.parse_args([
@@ -45,6 +46,7 @@ def test_build_parser_supports_e2e_command():
     assert args.completion_mode == "first-results"
     assert args.scan_config == "full-and-fast"
     assert args.scan_config_json is None
+    assert args.scap_path is None
     assert args.tcp_ports is None
     assert args.ssh_username == "msfadmin"
     assert args.ssh_password == "msfadmin"
@@ -65,6 +67,7 @@ def test_cmd_e2e_logs_default_ports_and_scan_config(monkeypatch, capsys, tmp_pat
     monkeypatch.setattr(cli, "discover_feed_layout", lambda *_args, **_kwargs: SimpleNamespace(vt_path=Path("/tmp/vt")))
     monkeypatch.setattr(cli, "convert_scan_config", lambda **_kwargs: {"target": {}, "vts": []})
     monkeypatch.setattr(cli, "_load_vt_index_for_cli", lambda _vt_path, progress=None: VT_INDEX)
+    monkeypatch.setattr(cli, "_load_scap_index_for_cli", lambda _scap_path, progress=None: None)
 
     class DummyClient:
         pass

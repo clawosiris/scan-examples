@@ -391,6 +391,8 @@ SCAP data for this CVE includes:
 - CPE product matching data
 - CVSS v3.1 and v2 metrics
 
+The example performs this as a second enrichment stage: scanner results map to VT metadata by OID, VT metadata references provide CVE IDs, and optional SCAP/NVD JSON data indexed by CVE ID provides the additional vulnerability context. The output preserves the original scanner result and VT metadata while adding `cve_ids`, `cve_metadata_status`, and `cve_metadata`. Missing SCAP data is non-fatal so the scanner workflow still works with only `vt-metadata.json` mounted.
+
 Relevant CVSS data from the example:
 
 | Metric | Value |
