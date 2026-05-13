@@ -36,7 +36,7 @@ jobs:
         run: docker compose build --pull example
       - name: Start community scanner stack and target
         run: docker compose up -d vulnerability-tests notus-data data-objects gpg-data redis-server configure-openvas openvasd target
-      - name: Run end-to-end Full & Fast test with scan-config default ports
+      - name: Run end-to-end custom scan config test
         run: |
           if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]; then
             completion_mode="scan-complete"
@@ -48,7 +48,7 @@ jobs:
           echo "Using e2e completion mode: ${completion_mode}"
           docker compose run --rm \
             -v "$PWD/artifacts:/artifacts" \
-            -e SCAN_CONFIG=full-and-fast \
+            -e SCAN_CONFIG_JSON=/app/scanconfigs/scanconfig-modified.json.zip \
             -e E2E_COMPLETION_MODE="${completion_mode}" \
             example e2e --host target \
               --wait-before-results 45 \

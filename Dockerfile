@@ -41,6 +41,7 @@ WORKDIR /app
 COPY --from=scannerctl-fetcher /usr/local/bin/scannerctl /usr/local/bin/scannerctl
 COPY --from=ghcr.io/astral-sh/uv:0.11.3 /uv /uvx /bin/
 COPY pyproject.toml uv.lock README.md scan-docs.md ./
+COPY scanconfigs ./scanconfigs
 COPY src ./src
 
 RUN uv sync --locked --no-dev --no-editable

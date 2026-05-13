@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import tempfile
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -62,9 +63,7 @@ def build_target_payload(
 ) -> dict[str, Any]:
     target: dict[str, Any] = {"hosts": hosts}
     if tcp_ports:
-        target["ports"] = [
-            {"protocol": "tcp", "range": [{"start": int(port)} for port in tcp_ports]}
-        ]
+        target["ports"] = _build_tcp_port_ranges(tcp_ports)
     if ssh_username and ssh_password:
         target["credentials"] = [
             {
@@ -74,6 +73,79 @@ def build_target_payload(
             }
         ]
     return {"target": target, "vts": []}
+
+
+def _build_tcp_port_ranges(tcp_ports: list[int]) -> list[dict[str, Any]]:
+    return [{"protocol": "tcp", "range": [{"start": int(port)} for port in tcp_ports]}]
+
+
+def _apply_target_overrides(
+    payload: dict[str, Any],
+    *,
+    hosts: list[str],
+    tcp_ports: list[int] | None = None,
+    ssh_username: str | None = None,
+    ssh_password: str | None = None,
+    ssh_port: int = 22,
+) -> dict[str, Any]:
+    updated = json.loads(json.dumps(payload))
+    target = updated.setdefault("target", {})
+    if not isinstance(target, dict):
+        raise ValueError("Custom scan config payload must contain an object target")
+    target["hosts"] = hosts
+    if tcp_ports:
+        target["ports"] = _build_tcp_port_ranges(tcp_ports)
+    if ssh_username and ssh_password:
+        target["credentials"] = [
+            {
+                "service": "ssh",
+                "port": int(ssh_port),
+                "up": {"username": ssh_username, "password": ssh_password},
+            }
+        ]
+    return updated
+
+
+def load_custom_scan_config(
+    path: str | os.PathLike[str],
+    *,
+    hosts: list[str],
+    tcp_ports: list[int] | None = None,
+    ssh_username: str | None = None,
+    ssh_password: str | None = None,
+    ssh_port: int = 22,
+) -> dict[str, Any]:
+    scan_config_path = Path(path)
+    if scan_config_path.suffix == ".zip":
+        with zipfile.ZipFile(scan_config_path) as archive:
+            candidates = [
+                name
+                for name in archive.namelist()
+                if not name.endswith("/")
+                and not name.startswith("__MACOSX/")
+                and Path(name).suffix == ".json"
+            ]
+            if len(candidates) != 1:
+                raise ValueError(
+                    f"Expected exactly one JSON scan config in {scan_config_path}, found {len(candidates)}"
+                )
+            with archive.open(candidates[0]) as handle:
+                payload = json.load(handle)
+    else:
+        payload = json.loads(scan_config_path.read_text(encoding="utf-8"))
+
+    if not isinstance(payload, dict):
+        raise ValueError("Custom scan config payload must be a JSON object")
+    if not isinstance(payload.get("vts"), list):
+        raise ValueError("Custom scan config payload must contain a vts list")
+    return _apply_target_overrides(
+        payload,
+        hosts=hosts,
+        tcp_ports=tcp_ports,
+        ssh_username=ssh_username,
+        ssh_password=ssh_password,
+        ssh_port=ssh_port,
+    )
 
 
 def _write_portlist_xml(tcp_ports: list[int]) -> Path:
