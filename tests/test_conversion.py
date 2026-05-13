@@ -23,6 +23,24 @@ def test_build_target_payload_omits_ports_without_override():
     assert payload["target"] == {"hosts": ["target.local"]}
 
 
+def test_build_target_payload_includes_ssh_credentials():
+    payload = build_target_payload(
+        ["target.local"],
+        tcp_ports=[22],
+        ssh_username="msfadmin",
+        ssh_password="msfadmin",
+        ssh_port=22,
+    )
+
+    assert payload["target"]["credentials"] == [
+        {
+            "service": "ssh",
+            "port": 22,
+            "up": {"username": "msfadmin", "password": "msfadmin"},
+        }
+    ]
+
+
 def test_discover_feed_layout_resolves_nested_vt_path(tmp_path):
     vt_root = tmp_path / "vulnerability-tests"
     nested = vt_root / "24.10" / "vt-data" / "nasl"
@@ -64,12 +82,21 @@ def test_convert_full_and_fast_invokes_scannerctl(tmp_path, monkeypatch):
         layout=discover_feed_layout(data_objects, vt_path),
         hosts=["example"],
         tcp_ports=[22],
+        ssh_username="msfadmin",
+        ssh_password="msfadmin",
         scannerctl_bin="scannerctl",
     )
 
     assert payload["vts"] == [{"oid": "1.2.3"}]
     assert captured["command"][0] == "scannerctl"
     assert captured["input"]["target"]["hosts"] == ["example"]
+    assert captured["input"]["target"]["credentials"] == [
+        {
+            "service": "ssh",
+            "port": 22,
+            "up": {"username": "msfadmin", "password": "msfadmin"},
+        }
+    ]
     assert "-l" in captured["command"]
     assert captured["command"][-1].endswith(FULL_AND_FAST)
 

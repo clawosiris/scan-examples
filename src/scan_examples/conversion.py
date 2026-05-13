@@ -52,11 +52,26 @@ def discover_feed_layout(data_objects_path: str | os.PathLike[str], vt_path: str
     return FeedLayout(data_objects_path=Path(data_objects_path), vt_path=_resolve_vt_path(Path(vt_path)))
 
 
-def build_target_payload(hosts: list[str], tcp_ports: list[int] | None = None) -> dict[str, Any]:
+def build_target_payload(
+    hosts: list[str],
+    tcp_ports: list[int] | None = None,
+    *,
+    ssh_username: str | None = None,
+    ssh_password: str | None = None,
+    ssh_port: int = 22,
+) -> dict[str, Any]:
     target: dict[str, Any] = {"hosts": hosts}
     if tcp_ports:
         target["ports"] = [
             {"protocol": "tcp", "range": [{"start": int(port)} for port in tcp_ports]}
+        ]
+    if ssh_username and ssh_password:
+        target["credentials"] = [
+            {
+                "service": "ssh",
+                "port": int(ssh_port),
+                "up": {"username": ssh_username, "password": ssh_password},
+            }
         ]
     return {"target": target, "vts": []}
 
@@ -121,6 +136,9 @@ def convert_scan_config(
     hosts: list[str],
     scan_config: str = "full-and-fast",
     tcp_ports: list[int] | None = None,
+    ssh_username: str | None = None,
+    ssh_password: str | None = None,
+    ssh_port: int = 22,
     scannerctl_bin: str = "scannerctl",
 ) -> dict[str, Any]:
     scan_config_path = _resolve_scan_config_path(layout, scan_config)
@@ -130,7 +148,13 @@ def convert_scan_config(
         portlist = generated_portlist
     else:
         portlist = _first_existing(layout.data_objects_path, OPENVAS_DEFAULT_PORTLIST_FILENAMES)
-    base_payload = build_target_payload(hosts, tcp_ports=tcp_ports)
+    base_payload = build_target_payload(
+        hosts,
+        tcp_ports=tcp_ports,
+        ssh_username=ssh_username,
+        ssh_password=ssh_password,
+        ssh_port=ssh_port,
+    )
 
     try:
         commands = _build_scannerctl_commands(
@@ -176,6 +200,9 @@ def convert_full_and_fast(
     layout: FeedLayout,
     hosts: list[str],
     tcp_ports: list[int] | None = None,
+    ssh_username: str | None = None,
+    ssh_password: str | None = None,
+    ssh_port: int = 22,
     scannerctl_bin: str = "scannerctl",
 ) -> dict[str, Any]:
     return convert_scan_config(
@@ -183,5 +210,8 @@ def convert_full_and_fast(
         hosts=hosts,
         scan_config="full-and-fast",
         tcp_ports=tcp_ports,
+        ssh_username=ssh_username,
+        ssh_password=ssh_password,
+        ssh_port=ssh_port,
         scannerctl_bin=scannerctl_bin,
     )
