@@ -10,14 +10,22 @@ The repository SHALL provide runnable Python example code that demonstrates use 
 - **AND** documents the required endpoints, feed mounts, environment variables, and default target TCP port set used by the bundled e2e flow
 - **AND** explains the `ospd-openvas` dependency needed for scans to start successfully in the community container stack.
 
-### Requirement: Full & Fast configuration conversion
-The repository SHALL provide a reproducible way to convert the community feed's **Full & Fast** scan configuration into the JSON payload format expected by the scanner REST API using `scannerctl`.
+### Requirement: Scan configuration selection
+The repository SHALL provide reproducible ways to build scanner REST API scan payloads from either community feed scan configurations converted with `scannerctl` or a custom scanner API JSON payload.
 
 #### Scenario: Convert feed configuration for API submission
 - **GIVEN** the community feed data and `scannerctl` are available in the test or runtime environment
-- **WHEN** the conversion step is executed for the Full & Fast scan configuration
+- **WHEN** the conversion step is executed for a named feed scan configuration
 - **THEN** the repository produces JSON suitable for inclusion in the `vts` portion of a scan-creation request
 - **AND** the conversion step is documented or scripted so users do not need to reverse-engineer it.
+
+#### Scenario: Load custom scanner API scan configuration
+- **GIVEN** a custom scanner API scan config JSON payload, or a zip archive containing one JSON payload
+- **WHEN** the e2e workflow is configured to use it
+- **THEN** the workflow uses that payload instead of running `scannerctl`
+- **AND** replaces the target hosts with the requested e2e hosts
+- **AND** injects configured SSH credentials into the target definition
+- **AND** preserves the payload's own target ports unless an explicit TCP port override is provided.
 
 ### Requirement: Scan lifecycle example coverage
 The Python example SHALL cover the documented scan lifecycle operations for the scanner REST API and make long-running scans observable enough for local runs and CI debugging while exposing enriched results that are useful for automation and post-scan inspection.
@@ -104,7 +112,7 @@ The repository SHALL include an end-to-end test that exercises the documented wo
 #### Scenario: e2e test runs lifecycle workflow
 - **GIVEN** the compose environment is running
 - **WHEN** the e2e test executes
-- **THEN** it performs Full & Fast configuration conversion
+- **THEN** it prepares a scan payload from either a scannerctl-converted feed config or a custom JSON config
 - **AND** logs the major lifecycle steps in a human-readable way while the workflow is running
 - **AND** pretty-prints enriched findings in the CI or terminal log
 - **AND** creates, starts, retrieves results for, and deletes a scan
@@ -132,6 +140,7 @@ The repository SHALL provide a GitHub Actions workflow that validates the exampl
 - **WHEN** the GitHub Actions workflow runs
 - **THEN** it builds the example container
 - **AND** starts the Docker Compose test environment
+- **AND** uses the bundled custom scan config JSON archive as the default e2e scan config
 - **AND** runs the e2e test in quick completion mode for pull requests and non-main pushes
 - **AND** runs the e2e test in full scan-completion mode for pushes to `main`
 - **AND** preserves logs or artifacts sufficient to debug failures.

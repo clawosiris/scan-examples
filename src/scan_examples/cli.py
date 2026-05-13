@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .client import OpenVASScannerClient
-from .conversion import convert_scan_config, discover_feed_layout
+from .conversion import convert_scan_config, discover_feed_layout, load_custom_scan_config
 from .e2e import dump_result, run_lifecycle
 from .feed import dump_pretty_enriched_results, enrich_results, load_vt_metadata_index
 
@@ -110,17 +110,28 @@ def _convert_with_fallback(
 
 
 def cmd_convert(args: argparse.Namespace) -> int:
-    layout = discover_feed_layout(args.data_objects_path, args.vt_path)
-    payload = _convert_with_fallback(
-        layout=layout,
-        hosts=args.host,
-        scan_config=args.scan_config,
-        tcp_ports=_parse_ports(args.tcp_ports),
-        ssh_username=args.ssh_username,
-        ssh_password=args.ssh_password,
-        ssh_port=args.ssh_port,
-        scannerctl_bin=args.scannerctl_bin,
-    )
+    tcp_ports = _parse_ports(args.tcp_ports)
+    if args.scan_config_json:
+        payload = load_custom_scan_config(
+            args.scan_config_json,
+            hosts=args.host,
+            tcp_ports=tcp_ports,
+            ssh_username=args.ssh_username,
+            ssh_password=args.ssh_password,
+            ssh_port=args.ssh_port,
+        )
+    else:
+        layout = discover_feed_layout(args.data_objects_path, args.vt_path)
+        payload = _convert_with_fallback(
+            layout=layout,
+            hosts=args.host,
+            scan_config=args.scan_config,
+            tcp_ports=tcp_ports,
+            ssh_username=args.ssh_username,
+            ssh_password=args.ssh_password,
+            ssh_port=args.ssh_port,
+            scannerctl_bin=args.scannerctl_bin,
+        )
     _dump_json(payload, args.output)
     return 0
 
@@ -175,7 +186,10 @@ def cmd_e2e(args: argparse.Namespace) -> int:
     ports_rendered = ", ".join(str(port) for port in tcp_ports) if tcp_ports else "default ports from the scan config"
     progress(f"Target hosts: {', '.join(args.host)}")
     progress(f"Scanning TCP ports: {ports_rendered}")
-    progress(f"Using scan config: {args.scan_config}")
+    if args.scan_config_json:
+        progress(f"Using custom scan config JSON: {args.scan_config_json}")
+    else:
+        progress(f"Using scan config: {args.scan_config}")
     if args.ssh_username and args.ssh_password:
         progress(f"Using SSH credential for {args.ssh_username}@{', '.join(args.host)}:{args.ssh_port}")
     else:
@@ -183,18 +197,29 @@ def cmd_e2e(args: argparse.Namespace) -> int:
     progress("Discovering Greenbone community feed layout")
     layout = discover_feed_layout(args.data_objects_path, args.vt_path)
     vt_index = _load_vt_index_for_cli(layout.vt_path, progress=progress)
-    progress("Converting scan configuration with scannerctl")
-    payload = _convert_with_fallback(
-        layout=layout,
-        hosts=args.host,
-        scan_config=args.scan_config,
-        tcp_ports=tcp_ports,
-        ssh_username=args.ssh_username,
-        ssh_password=args.ssh_password,
-        ssh_port=args.ssh_port,
-        scannerctl_bin=args.scannerctl_bin,
-        progress=progress,
-    )
+    if args.scan_config_json:
+        progress("Loading custom scan configuration JSON")
+        payload = load_custom_scan_config(
+            args.scan_config_json,
+            hosts=args.host,
+            tcp_ports=tcp_ports,
+            ssh_username=args.ssh_username,
+            ssh_password=args.ssh_password,
+            ssh_port=args.ssh_port,
+        )
+    else:
+        progress("Converting scan configuration with scannerctl")
+        payload = _convert_with_fallback(
+            layout=layout,
+            hosts=args.host,
+            scan_config=args.scan_config,
+            tcp_ports=tcp_ports,
+            ssh_username=args.ssh_username,
+            ssh_password=args.ssh_password,
+            ssh_port=args.ssh_port,
+            scannerctl_bin=args.scannerctl_bin,
+            progress=progress,
+        )
     client = _build_client(args)
     result = run_lifecycle(
         client=client,
@@ -264,6 +289,11 @@ def build_parser() -> argparse.ArgumentParser:
         )
         add_vt_path_flag(command)
         add_scan_config_flag(command)
+        command.add_argument(
+            "--scan-config-json",
+            default=os.environ.get("SCAN_CONFIG_JSON"),
+            help="Path to a custom scanner API scan config JSON payload, or a zip containing one JSON file",
+        )
         command.add_argument(
             "--scannerctl-bin",
             default=os.environ.get("SCANNERCTL_BIN", "scannerctl"),

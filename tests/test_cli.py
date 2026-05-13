@@ -44,6 +44,7 @@ def test_build_parser_supports_e2e_command():
     assert args.results_poll_interval == 15
     assert args.completion_mode == "first-results"
     assert args.scan_config == "full-and-fast"
+    assert args.scan_config_json is None
     assert args.tcp_ports is None
     assert args.ssh_username == "msfadmin"
     assert args.ssh_password == "msfadmin"
@@ -178,6 +179,51 @@ def test_cmd_e2e_passes_custom_scan_config_and_ports(monkeypatch, tmp_path):
     assert captured["ssh_username"] == "custom-user"
     assert captured["ssh_password"] == "custom-pass"
     assert captured["ssh_port"] == 2222
+
+
+def test_cmd_e2e_uses_custom_scan_config_json(monkeypatch, tmp_path, capsys):
+    parser = build_parser()
+    custom_scan_config = tmp_path / "scan.json"
+    custom_scan_config.write_text('{"target": {"hosts": []}, "vts": []}')
+    output_path = tmp_path / "result.json"
+    args = parser.parse_args([
+        "e2e",
+        "--host",
+        "target",
+        "--scan-config-json",
+        str(custom_scan_config),
+        "--tcp-ports",
+        "22",
+        "--output",
+        str(output_path),
+    ])
+
+    captured = {}
+    monkeypatch.setattr(cli, "discover_feed_layout", lambda *_args, **_kwargs: SimpleNamespace(vt_path=Path("/tmp/vt")))
+    monkeypatch.setattr(cli, "_load_vt_index_for_cli", lambda _vt_path, progress=None: VT_INDEX)
+
+    def fake_load_custom_scan_config(path, **kwargs):
+        captured["path"] = path
+        captured.update(kwargs)
+        return {"target": {"hosts": kwargs["hosts"]}, "vts": []}
+
+    monkeypatch.setattr(cli, "load_custom_scan_config", fake_load_custom_scan_config)
+    monkeypatch.setattr(cli, "convert_scan_config", lambda **_kwargs: (_ for _ in ()).throw(AssertionError("scannerctl path should not run")))
+    monkeypatch.setattr(cli, "_build_client", lambda _args: object())
+
+    class DummyResult:
+        findings_summary = {"total": 0, "by_severity": {}, "by_type": {}}
+        enriched_results = []
+
+    monkeypatch.setattr(cli, "run_lifecycle", lambda **_kwargs: DummyResult())
+    monkeypatch.setattr(cli, "dump_result", lambda _result: '{"ok": true}')
+
+    assert cli.cmd_e2e(args) == 0
+    assert captured["path"] == str(custom_scan_config)
+    assert captured["hosts"] == ["target"]
+    assert captured["tcp_ports"] == [22]
+    assert captured["ssh_username"] == "msfadmin"
+    assert "[e2e] Using custom scan config JSON:" in capsys.readouterr().err
 
 
 def test_cmd_results_emits_enriched_json(monkeypatch, capsys):

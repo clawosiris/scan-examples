@@ -9,7 +9,7 @@ MIT. See `LICENSE`.
 ## What is in this repo?
 
 - Python CLI example for the OpenVAS scanner REST API
-- `scannerctl` based conversion of feed scan configs into scan JSON (defaults to **Full & Fast**)
+- `scannerctl` based conversion of feed scan configs into scan JSON, plus direct custom scan JSON payloads
 - Docker image for the example CLI
 - Docker Compose environment with:
   - Greenbone community feed containers
@@ -37,7 +37,8 @@ Supported environment variables:
 - `DATA_OBJECTS_PATH` — mounted community `data-objects` feed path
 - `VT_PATH` — mounted community `vulnerability-tests` feed path (used for both NASL content and `vt-metadata.json` enrichment lookups)
 - `SCANNERCTL_BIN` — path to `scannerctl`
-- `SCAN_CONFIG` — scan config to convert (defaults to `full-and-fast`)
+- `SCAN_CONFIG` — scan config to convert with `scannerctl` (defaults to `full-and-fast`)
+- `SCAN_CONFIG_JSON` — path to a custom scanner API scan config JSON payload, or a `.zip` containing one JSON file; when set, the e2e flow skips `scannerctl` conversion and uses this payload as a template
 - `TARGET_TCP_PORTS` — optional comma-separated TCP ports for the target definition; omit it to use the scan config defaults
 - `TARGET_SSH_USERNAME` / `TARGET_SSH_PASSWORD` / `TARGET_SSH_PORT` — SSH credentials to include in the scan target definition (defaults: `msfadmin` / `msfadmin` / `22` for the bundled target)
 - `WAIT_BEFORE_RESULTS` — initial delay before polling for scan results in the `e2e` flow
@@ -76,7 +77,7 @@ openvas-example e2e --host target
 ```
 
 This command:
-1. Resolves the mounted feed layout and converts the requested scan config with `scannerctl` (default: **Full & Fast**)
+1. Resolves the mounted feed layout and either converts the requested scan config with `scannerctl` or loads a custom scan config JSON payload
 2. Retries scan creation while `openvasd` is still warming up
 3. Starts the scan
 4. Polls according to the configured completion mode: quick checks stop after first findings; full checks wait for the scan status to reach `succeeded`
@@ -87,7 +88,9 @@ This command:
 
 While it runs, the CLI now emits step-by-step progress logs to stderr (handy in CI), pretty-prints the enriched findings in the log, and writes final JSON that includes the final scan status, raw `results`, `enriched_results`, and a `findings_summary` block with grouped counts by severity and type.
 
-The bundled target is `kirscht/metasploitable3-ub1404` with FTP, SSH, HTTP, SMB, and MySQL enabled. Compose explicitly sets the target password to `msfadmin`, and the e2e flow includes the matching SSH credential (`msfadmin` / `msfadmin` on port `22`) in the converted scan target so authenticated SSH checks can run. By default the e2e flow tries to use the scan config's default ports. If the feed does not include the referenced default port-list XML, the example falls back to the bundled metasploitable service ports `21,22,80,139,445,3306` so local runs and CI stay stable. If you want a custom target port set, pass `--tcp-ports` (or set `TARGET_TCP_PORTS`) and the example will generate an override port list for scannerctl.
+The bundled target is `kirscht/metasploitable3-ub1404` with FTP, SSH, HTTP, SMB, and MySQL enabled. Compose explicitly sets the target password to `msfadmin`, and the e2e flow includes the matching SSH credential (`msfadmin` / `msfadmin` on port `22`) in the scan target so authenticated SSH checks can run. By default, scannerctl-based conversion tries to use the scan config's default ports. If the feed does not include the referenced default port-list XML, the example falls back to the bundled metasploitable service ports `21,22,80,139,445,3306` so local runs and CI stay stable. If you want a custom target port set, pass `--tcp-ports` (or set `TARGET_TCP_PORTS`); scannerctl conversion will generate an override port list, and custom JSON payloads will have their target ports replaced.
+
+For custom scan configs, pass `--scan-config-json` or set `SCAN_CONFIG_JSON`. The payload is treated as a template: the e2e flow replaces `target.hosts`, injects SSH credentials when configured, and preserves the payload's own ports unless `--tcp-ports` is provided. The repository includes `scanconfigs/scanconfig-modified.json.zip` from issue #17, and CI uses it as the default e2e scan config.
 
 The e2e completion behavior is controlled by `--completion-mode` / `E2E_COMPLETION_MODE`:
 
@@ -112,7 +115,7 @@ Run the example container against that stack:
 docker compose run --rm example e2e --host target
 ```
 
-Use a different scan config or explicit ports if you want to override the defaults:
+Use a different scannerctl scan config, custom scan JSON, or explicit ports if you want to override the defaults:
 
 ```bash
 docker compose run --rm \
@@ -120,6 +123,10 @@ docker compose run --rm \
   -e TARGET_TCP_PORTS=21,22,80,139,445,3306 \
   -e TARGET_SSH_USERNAME=msfadmin \
   -e TARGET_SSH_PASSWORD=msfadmin \
+  example e2e --host target
+
+docker compose run --rm \
+  -e SCAN_CONFIG_JSON=/app/scanconfigs/scanconfig-modified.json.zip \
   example e2e --host target
 ```
 
