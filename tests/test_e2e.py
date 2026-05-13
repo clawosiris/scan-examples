@@ -151,10 +151,10 @@ def test_run_lifecycle_emits_progress_in_order(monkeypatch):
 
 def test_run_lifecycle_waits_for_minimum_first_results(monkeypatch):
     initial_results = [
-        {"id": index, "type": "alarm", "severity": "high"} for index in range(1, 100)
+        {"id": index, "type": "alarm", "severity": "high"} for index in range(1, 250)
     ]
     enough_results = [
-        {"id": index, "type": "alarm", "severity": "high"} for index in range(1, 101)
+        {"id": index, "type": "alarm", "severity": "high"} for index in range(1, 251)
     ]
     client = DummyClient(results_sequence=[initial_results, enough_results])
     messages: list[str] = []
@@ -169,13 +169,13 @@ def test_run_lifecycle_waits_for_minimum_first_results(monkeypatch):
         wait_before_results=0,
         results_timeout=60,
         results_poll_interval=5,
-        min_results=100,
+        min_results=250,
         progress=messages.append,
     )
 
-    assert result.findings_summary["total"] == 100
+    assert result.findings_summary["total"] == 250
     assert sleeps == [5]
-    assert "Fetched 99 findings; waiting for at least 100 before retrying in 5s" in messages
+    assert "Fetched 249 findings; waiting for at least 250 before retrying in 5s" in messages
 
 
 def test_run_lifecycle_can_wait_for_scan_completion(monkeypatch):
