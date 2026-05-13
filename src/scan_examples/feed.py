@@ -319,6 +319,25 @@ def extract_result_oid(result: dict[str, Any]) -> str | None:
     return None
 
 
+def _enriched_result(
+    result: dict[str, Any],
+    *,
+    vt_metadata_status: str,
+    vt_metadata: dict[str, Any] | None,
+    cve_ids: list[str] | None = None,
+    cve_metadata_status: str = "no_cves",
+    cve_metadata: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    return {
+        **result,
+        "vt-metadata-status": vt_metadata_status,
+        "vt-metadata": vt_metadata,
+        "cve-ids": cve_ids or [],
+        "cve-metadata-status": cve_metadata_status,
+        "cve-metadata": cve_metadata or [],
+    }
+
+
 def enrich_results(
     results: list[dict[str, Any]],
     vt_index: dict[str, dict[str, Any]] | None,
@@ -327,23 +346,27 @@ def enrich_results(
     enriched: list[dict[str, Any]] = []
     for result in results:
         oid = extract_result_oid(result)
-        base: dict[str, Any] = {
-            "result": result,
-            "cve_ids": [],
-            "cve_metadata_status": "no_cves",
-            "cve_metadata": [],
-        }
         if oid is None:
-            enriched.append({**base, "vt_metadata_status": "missing_oid", "vt_metadata": None})
+            enriched.append(
+                _enriched_result(result, vt_metadata_status="missing_oid", vt_metadata=None)
+            )
             continue
 
         if vt_index is None:
-            enriched.append({**base, "vt_metadata_status": "metadata_unavailable", "vt_metadata": None})
+            enriched.append(
+                _enriched_result(
+                    result,
+                    vt_metadata_status="metadata_unavailable",
+                    vt_metadata=None,
+                )
+            )
             continue
 
         entry = vt_index.get(oid)
         if entry is None:
-            enriched.append({**base, "vt_metadata_status": "not_found", "vt_metadata": None})
+            enriched.append(
+                _enriched_result(result, vt_metadata_status="not_found", vt_metadata=None)
+            )
             continue
 
         cve_ids = extract_cve_ids_from_vt_metadata(entry)
@@ -360,29 +383,20 @@ def enrich_results(
             cve_status = "not_found"
 
         enriched.append(
-            {
-                **base,
-                "vt_metadata_status": "matched",
-                "vt_metadata": select_vt_metadata_fields(entry),
-                "cve_ids": cve_ids,
-                "cve_metadata_status": cve_status,
-                "cve_metadata": cve_metadata,
-            }
+            _enriched_result(
+                result,
+                vt_metadata_status="matched",
+                vt_metadata=select_vt_metadata_fields(entry),
+                cve_ids=cve_ids,
+                cve_metadata_status=cve_status,
+                cve_metadata=cve_metadata,
+            )
         )
     return enriched
 
 
 def _format_enriched_result_for_log(enriched_result: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "result": enriched_result.get("result"),
-        "enrichment": {
-            "vt_metadata_status": enriched_result.get("vt_metadata_status"),
-            "vt_metadata": enriched_result.get("vt_metadata"),
-            "cve_ids": enriched_result.get("cve_ids", []),
-            "cve_metadata_status": enriched_result.get("cve_metadata_status", "no_cves"),
-            "cve_metadata": enriched_result.get("cve_metadata", []),
-        },
-    }
+    return enriched_result
 
 
 def dump_pretty_enriched_results(enriched_results: list[dict[str, Any]]) -> str:

@@ -64,7 +64,7 @@ def test_dump_result_is_machine_readable():
         stop_response={"status": "stopped"},
         final_status={"status": "stopped"},
         results=[{"id": 1, "type": "alarm"}],
-        enriched_results=[{"result": {"id": 1, "type": "alarm"}, "vt_metadata_status": "missing_oid", "vt_metadata": None}],
+        enriched_results=[{"id": 1, "type": "alarm", "vt-metadata-status": "missing_oid", "vt-metadata": None}],
         findings_summary={"total": 1, "by_severity": {"unknown": 1}, "by_type": {"alarm": 1}},
         delete_response={"status": "deleted"},
     )
@@ -116,8 +116,8 @@ def test_run_lifecycle_emits_progress_in_order(monkeypatch):
     assert result.stop_response == {"status": "stopped"}
     assert result.final_status == {"status": "running"}
     assert result.delete_response == {"status": "deleted"}
-    assert result.enriched_results[0]["vt_metadata_status"] == "matched"
-    assert result.enriched_results[1]["vt_metadata_status"] == "missing_oid"
+    assert result.enriched_results[0]["vt-metadata-status"] == "matched"
+    assert result.enriched_results[1]["vt-metadata-status"] == "missing_oid"
     assert sleeps == [5]
     assert messages == [
         "Creating scan (attempt 1/12)",

@@ -79,9 +79,11 @@ def test_cmd_e2e_logs_default_ports_and_scan_config(monkeypatch, capsys, tmp_pat
         findings_summary = {"total": 1, "by_severity": {"high": 1}, "by_type": {"alarm": 1}}
         enriched_results = [
             {
-                "result": {"id": 1, "oid": "1.2.3", "type": "alarm"},
-                "vt_metadata_status": "matched",
-                "vt_metadata": {"name": "Example VT"},
+                "id": 1,
+                "oid": "1.2.3",
+                "type": "alarm",
+                "vt-metadata-status": "matched",
+                "vt-metadata": {"name": "Example VT"},
             }
         ]
 
@@ -249,8 +251,8 @@ def test_cmd_results_emits_enriched_json(monkeypatch, capsys):
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["scan_id"] == "scan-123"
-    assert payload["enriched_results"][0]["vt_metadata_status"] == "matched"
-    assert payload["enriched_results"][0]["vt_metadata"]["name"] == "Example VT"
+    assert payload["enriched_results"][0]["vt-metadata-status"] == "matched"
+    assert payload["enriched_results"][0]["vt-metadata"]["name"] == "Example VT"
 
 
 def test_load_vt_index_for_cli_soft_fails_on_invalid_json():
