@@ -23,7 +23,8 @@ VT_INDEX = {
 }
 
 
-def test_build_parser_supports_e2e_command():
+def test_build_parser_supports_e2e_command(monkeypatch):
+    monkeypatch.delenv("SCAP_PATH", raising=False)
     parser = build_parser()
 
     args = parser.parse_args([

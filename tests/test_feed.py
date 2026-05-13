@@ -138,6 +138,22 @@ def test_load_scap_cve_index_supports_nvd_2_payload(tmp_path):
     assert cve["affected_cpes"] == ["cpe:2.3:a:example:app:1.0:*:*:*:*:*:*:*"]
 
 
+def test_load_scap_cve_index_normalizes_and_filters_cve_ids(tmp_path):
+    scap_path = tmp_path / "scap.json"
+    scap_path.write_text(
+        json.dumps([
+            {"id": "cve-2026-0002", "descriptions": [{"lang": "en", "value": "lowercase CVE"}]},
+            {"id": "NOT-A-CVE", "descriptions": [{"lang": "en", "value": "ignore me"}]},
+        ]),
+        encoding="utf-8",
+    )
+
+    _paths, cve_index = load_scap_cve_index(scap_path)
+
+    assert list(cve_index) == ["CVE-2026-0002"]
+    assert cve_index["CVE-2026-0002"]["descriptions"] == ["lowercase CVE"]
+
+
 def test_enrich_results_adds_cve_metadata_after_vt_oid_match():
     results = [{"id": 1, "oid": "1.2.3", "type": "alarm"}]
     vt_index = {

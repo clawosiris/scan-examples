@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import gzip
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 VT_METADATA_FILENAME = "vt-metadata.json"
 SCAP_JSON_GLOBS = ("*.json", "*.json.gz")
+CVE_ID_PATTERN = re.compile(r"^CVE-\d{4}-\d{4,}$", re.IGNORECASE)
 
 
 def resolve_vt_metadata_path(vt_path: str | Path) -> Path:
@@ -72,7 +74,8 @@ def _read_json_path(path: Path) -> Any:
     if path.suffix == ".gz":
         with gzip.open(path, "rt", encoding="utf-8") as handle:
             return json.load(handle)
-    return json.loads(path.read_text(encoding="utf-8"))
+    with path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
 
 
 def _iter_cve_entries(payload: Any):
@@ -210,7 +213,10 @@ def select_scap_cve_fields(entry: dict[str, Any]) -> dict[str, Any] | None:
         meta = entry.get("cve", {}).get("CVE_data_meta") if isinstance(entry.get("cve"), dict) else entry.get("CVE_data_meta")
         if isinstance(meta, dict):
             cve_id = meta.get("ID")
-    if not isinstance(cve_id, str) or not cve_id:
+    if not isinstance(cve_id, str):
+        return None
+    cve_id = cve_id.strip().upper()
+    if not CVE_ID_PATTERN.fullmatch(cve_id):
         return None
 
     cve_body = entry.get("cve") if isinstance(entry.get("cve"), dict) else entry
