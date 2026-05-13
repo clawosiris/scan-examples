@@ -163,7 +163,7 @@ def cmd_e2e(args: argparse.Namespace) -> int:
     progress(f"Using scan config: {args.scan_config}")
     progress("Discovering Greenbone community feed layout")
     layout = discover_feed_layout(args.data_objects_path, args.vt_path)
-    vt_index = _load_vt_index_for_cli(args.vt_path, progress=progress)
+    vt_index = _load_vt_index_for_cli(layout.vt_path, progress=progress)
     progress("Converting scan configuration with scannerctl")
     payload = _convert_with_fallback(
         layout=layout,
