@@ -75,12 +75,15 @@ jobs:
             results_timeout="1800"
             no_findings_increment_timeout="0"
           fi
+          min_results="1000"
           echo "Using e2e completion mode: ${completion_mode}"
+          echo "Using minimum first-results count: ${min_results}"
           echo "Using no-findings-increment timeout: ${no_findings_increment_timeout}s"
           docker compose run --rm \
             -v "$PWD/artifacts:/artifacts" \
             -e SCAN_CONFIG_JSON=/app/scanconfigs/scanconfig-modified.json.zip \
             -e E2E_COMPLETION_MODE="${completion_mode}" \
+            -e E2E_MIN_RESULTS="${min_results}" \
             -e E2E_NO_FINDINGS_INCREMENT_TIMEOUT="${no_findings_increment_timeout}" \
             example e2e --host target \
               --wait-before-results 45 \

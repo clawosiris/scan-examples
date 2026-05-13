@@ -64,12 +64,47 @@ def test_enrich_results_marks_missing_metadata_states():
 
     enriched = enrich_results(results, vt_index)
 
-    assert enriched[0]["vt_metadata_status"] == "matched"
-    assert enriched[0]["vt_metadata"]["name"] == "Example VT"
-    assert enriched[1]["vt_metadata_status"] == "not_found"
-    assert enriched[1]["vt_metadata"] is None
-    assert enriched[2]["vt_metadata_status"] == "missing_oid"
-    assert enriched[2]["vt_metadata"] is None
+    assert enriched[0]["vt-metadata-status"] == "matched"
+    assert enriched[0]["vt-metadata"]["name"] == "Example VT"
+    assert enriched[1]["vt-metadata-status"] == "not_found"
+    assert enriched[1]["vt-metadata"] is None
+    assert enriched[2]["vt-metadata-status"] == "missing_oid"
+    assert enriched[2]["vt-metadata"] is None
+
+
+def test_enrich_results_preserves_raw_result_shape_and_adds_metadata_fields():
+    raw_result = {
+        "id": 3,
+        "type": "alarm",
+        "ip_address": "127.0.0.1",
+        "hostname": "localhost",
+        "oid": "1.3.6.1.4.1.25623.1.0.147696",
+        "protocol": "tcp",
+        "message": "Installed version: 9.53.3\nFixed version: 9.55",
+    }
+    vt_index = {
+        "1.3.6.1.4.1.25623.1.0.147696": {
+            "oid": "1.3.6.1.4.1.25623.1.0.147696",
+            "name": "Ghostscript 9.50 < 9.55.0 Sandbox Escape Vulnerability - Linux",
+            "filename": "2022/artifex/gb_ghostscript_sandbox_escape_vuln_sep21_lin.nasl",
+            "family": "General",
+            "category": "gather_info",
+            "references": [{"class": "cve", "id": "CVE-2021-3781"}],
+            "tag": {"solution": "Update to version 9.55 or later."},
+        }
+    }
+
+    enriched = enrich_results([raw_result], vt_index)
+
+    assert enriched[0]["id"] == raw_result["id"]
+    assert enriched[0]["message"] == raw_result["message"]
+    assert "result" not in enriched[0]
+    assert (
+        enriched[0]["vt-metadata"]["name"]
+        == "Ghostscript 9.50 < 9.55.0 Sandbox Escape Vulnerability - Linux"
+    )
+    assert enriched[0]["vt-metadata-status"] == "matched"
+
 
 
 def test_enrich_results_handles_unavailable_metadata_index():
@@ -77,12 +112,13 @@ def test_enrich_results_handles_unavailable_metadata_index():
 
     assert enriched == [
         {
-            "result": {"id": 1, "oid": "1.2.3"},
-            "vt_metadata_status": "metadata_unavailable",
-            "vt_metadata": None,
-            "cve_ids": [],
-            "cve_metadata_status": "no_cves",
-            "cve_metadata": [],
+            "id": 1,
+            "oid": "1.2.3",
+            "vt-metadata-status": "metadata_unavailable",
+            "vt-metadata": None,
+            "cve-ids": [],
+            "cve-metadata-status": "no_cves",
+            "cve-metadata": [],
         }
     ]
 
@@ -167,10 +203,10 @@ def test_enrich_results_adds_cve_metadata_after_vt_oid_match():
 
     enriched = enrich_results(results, vt_index, cve_index)
 
-    assert enriched[0]["vt_metadata_status"] == "matched"
-    assert enriched[0]["cve_ids"] == ["CVE-2026-0001"]
-    assert enriched[0]["cve_metadata_status"] == "matched"
-    assert enriched[0]["cve_metadata"] == [{"id": "CVE-2026-0001", "descriptions": ["Example CVE"]}]
+    assert enriched[0]["vt-metadata-status"] == "matched"
+    assert enriched[0]["cve-ids"] == ["CVE-2026-0001"]
+    assert enriched[0]["cve-metadata-status"] == "matched"
+    assert enriched[0]["cve-metadata"] == [{"id": "CVE-2026-0001", "descriptions": ["Example CVE"]}]
 
 
 def test_enrich_results_reports_missing_cve_metadata():
@@ -179,26 +215,28 @@ def test_enrich_results_reports_missing_cve_metadata():
 
     enriched = enrich_results(results, vt_index, {})
 
-    assert enriched[0]["cve_ids"] == ["CVE-2026-0002"]
-    assert enriched[0]["cve_metadata_status"] == "not_found"
-    assert enriched[0]["cve_metadata"] == []
+    assert enriched[0]["cve-ids"] == ["CVE-2026-0002"]
+    assert enriched[0]["cve-metadata-status"] == "not_found"
+    assert enriched[0]["cve-metadata"] == []
 
 
-def test_dump_pretty_enriched_results_includes_enrichment_data_for_logs():
+def test_dump_pretty_enriched_results_preserves_enriched_result_shape_for_logs():
     rendered = dump_pretty_enriched_results([
         {
-            "result": {"id": 1, "oid": "1.2.3"},
-            "vt_metadata_status": "matched",
-            "vt_metadata": {"name": "Example VT"},
-            "cve_ids": ["CVE-2026-0001"],
-            "cve_metadata_status": "matched",
-            "cve_metadata": [{"id": "CVE-2026-0001", "descriptions": ["Example CVE"]}],
+            "id": 1,
+            "oid": "1.2.3",
+            "vt-metadata-status": "matched",
+            "vt-metadata": {"name": "Example VT"},
+            "cve-ids": ["CVE-2026-0001"],
+            "cve-metadata-status": "matched",
+            "cve-metadata": [{"id": "CVE-2026-0001", "descriptions": ["Example CVE"]}],
         }
     ])
     payload = json.loads(rendered)
 
-    assert payload[0]["result"] == {"id": 1, "oid": "1.2.3"}
-    assert payload[0]["enrichment"]["vt_metadata"] == {"name": "Example VT"}
-    assert payload[0]["enrichment"]["cve_ids"] == ["CVE-2026-0001"]
-    assert payload[0]["enrichment"]["cve_metadata"] == [{"id": "CVE-2026-0001", "descriptions": ["Example CVE"]}]
+    assert payload[0]["id"] == 1
+    assert payload[0]["oid"] == "1.2.3"
+    assert payload[0]["vt-metadata"] == {"name": "Example VT"}
+    assert payload[0]["cve-ids"] == ["CVE-2026-0001"]
+    assert payload[0]["cve-metadata"] == [{"id": "CVE-2026-0001", "descriptions": ["Example CVE"]}]
     assert rendered.startswith("[")

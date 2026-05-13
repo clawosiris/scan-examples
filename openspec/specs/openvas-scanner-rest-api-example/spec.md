@@ -91,7 +91,9 @@ The repository SHALL provide example code that expands scanner results with meta
 - **WHEN** the enrichment step processes that result
 - **THEN** it looks up the matching VT metadata entry by OID
 - **AND** includes useful metadata in the enriched output such as VT name, filename, family, category, references, and selected tags when available
-- **AND** preserves the original scanner result fields alongside the enrichment data.
+- **AND** preserves the original scanner result fields at the enriched result entry top level
+- **AND** adds enrichment data directly to each result entry rather than wrapping the raw result in
+  a separate `result` object.
 
 #### Scenario: Enrich result by CVE from optional SCAP data
 - **GIVEN** a scanner result whose matched VT metadata references one or more CVE IDs
@@ -105,7 +107,7 @@ The repository SHALL provide example code that expands scanner results with meta
 - **GIVEN** a scanner result whose OID is missing from the local VT metadata index or is absent entirely
 - **WHEN** the enrichment step processes that result
 - **THEN** it does not fail the whole workflow solely because enrichment data is missing
-- **AND** preserves the original scanner result in the output
+- **AND** preserves the original scanner result fields at the enriched result entry top level
 - **AND** marks the metadata lookup as unavailable or omitted in a consistent way.
 
 #### Scenario: VT metadata payload is unreadable
@@ -131,9 +133,12 @@ The repository SHALL include an end-to-end test that exercises the documented wo
 - **AND** pretty-prints enriched findings in the CI or terminal log
 - **AND** creates, starts, retrieves results for, and deletes a scan
 - **AND** supports a quick mode that stops the scan after initial findings are available
+- **AND** supports a configurable minimum result count before stopping in quick mode
 - **AND** supports a full mode that keeps polling until the scan reaches `succeeded` instead of stopping at initial findings
 - **AND** writes the lifecycle result payload in a stable machine-readable JSON format for automation and debugging
 - **AND** includes both raw `results` and `enriched_results`
+- **AND** keeps each `enriched_results` entry shaped like the original scanner result with added
+  enrichment fields
 - **AND** includes summary stats for the number of findings returned by the scan
 - **AND** fails if any lifecycle step cannot be completed.
 
