@@ -4,10 +4,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
 from .feed import load_notus_advisory_index, load_scap_cve_index, load_vt_metadata_index
+
+ENRICHMENT_ENGINE_CHOICES = ("auto", "python", "rust")
+RUST_BINARY_ENV = "SCAN_EXAMPLES_RUST_ENRICHMENT_BIN"
+ENGINE_ENV = "SCAN_EXAMPLES_ENRICHMENT_ENGINE"
 
 
 def select_vt_metadata_fields(entry: dict[str, Any]) -> dict[str, Any]:
@@ -166,9 +175,6 @@ def enrich_results(
         vt_cve_ids = extract_cve_ids_from_vt_metadata(vt_entry)
         notus_cve_ids = extract_cve_ids_from_notus_metadata(notus_entries)
         cve_ids = sorted(set(vt_cve_ids + notus_cve_ids))
-        # VT metadata and richer Notus advisory metadata can both carry CVE ids;
-        # the optional SCAP index lets us expand those ids into richer
-        # vulnerability context for each finding.
         cve_metadata = [
             scap_cve_index[cve_id]
             for cve_id in cve_ids
@@ -232,14 +238,159 @@ def load_scan_results(results_path: str | Path) -> list[dict[str, Any]]:
     return results
 
 
-def enrich_results_from_files(
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def resolve_rust_enrichment_binary(explicit: str | Path | None = None) -> Path | None:
+    """Locate the Rust enrichment binary if it is available."""
+    candidates: list[Path] = []
+    if explicit is not None:
+        candidates.append(Path(explicit))
+
+    env_path = os.environ.get(RUST_BINARY_ENV)
+    if env_path:
+        candidates.append(Path(env_path))
+
+    which_path = shutil.which("scan-enrich-results")
+    if which_path:
+        candidates.append(Path(which_path))
+
+    repo_root = _repo_root()
+    candidates.extend(
+        [
+            repo_root / "target" / "release" / "scan-enrich-results",
+            repo_root / "target" / "debug" / "scan-enrich-results",
+        ]
+    )
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def resolve_enrichment_engine(
+    engine: str | None = None,
+    *,
+    rust_bin: str | Path | None = None,
+) -> str:
+    """Choose the effective enrichment engine."""
+    selected = (engine or os.environ.get(ENGINE_ENV) or "auto").lower()
+    if selected not in ENRICHMENT_ENGINE_CHOICES:
+        raise ValueError(
+            f"Unsupported enrichment engine {selected!r}; expected one of {ENRICHMENT_ENGINE_CHOICES}"
+        )
+    if selected == "auto":
+        return "rust" if resolve_rust_enrichment_binary(rust_bin) else "python"
+    if selected == "rust" and resolve_rust_enrichment_binary(rust_bin) is None:
+        raise FileNotFoundError(
+            "Rust enrichment engine requested but scan-enrich-results binary was not found"
+        )
+    return selected
+
+
+def _run_rust_enrichment(
+    *,
+    results_path: str | Path,
+    vt_metadata_path: str | Path | None = None,
+    scap_path: str | Path | None = None,
+    notus_path: str | Path | None = None,
+    rust_bin: str | Path | None = None,
+) -> list[dict[str, Any]]:
+    """Invoke the Rust enrichment CLI and parse its JSON output."""
+    binary = resolve_rust_enrichment_binary(rust_bin)
+    if binary is None:
+        raise FileNotFoundError(
+            "Rust enrichment engine requested but scan-enrich-results binary was not found"
+        )
+
+    with tempfile.TemporaryDirectory(prefix="scan-enrich-rust-") as tmpdir:
+        output_path = Path(tmpdir) / "enriched.json"
+        command = [
+            str(binary),
+            "--results",
+            str(results_path),
+            "--output",
+            str(output_path),
+        ]
+        if vt_metadata_path is not None:
+            command.extend(["--vt-metadata", str(vt_metadata_path)])
+        if notus_path is not None:
+            command.extend(["--notus-path", str(notus_path)])
+        if scap_path is not None:
+            command.extend(["--scap-path", str(scap_path)])
+
+        completed = subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        if completed.stderr:
+            print(completed.stderr, end="", file=sys.stderr)
+        payload = json.loads(output_path.read_text(encoding="utf-8"))
+
+    if not isinstance(payload, list) or not all(
+        isinstance(item, dict) for item in payload
+    ):
+        raise ValueError("Rust enrichment output must be a JSON list of result objects")
+    return payload
+
+
+def enrich_results_python(
+    results: list[dict[str, Any]],
+    vt_index: dict[str, dict[str, Any]] | None,
+    scap_cve_index: dict[str, dict[str, Any]] | None = None,
+    notus_index: dict[str, list[dict[str, Any]]] | None = None,
+) -> list[dict[str, Any]]:
+    """Compatibility alias for the reference Python implementation."""
+    return enrich_results(results, vt_index, scap_cve_index, notus_index)
+
+
+def enrich_results_records(
+    *,
+    results: list[dict[str, Any]],
+    vt_metadata_path: str | Path | None = None,
+    scap_path: str | Path | None = None,
+    notus_path: str | Path | None = None,
+    engine: str = "auto",
+    rust_bin: str | Path | None = None,
+) -> list[dict[str, Any]]:
+    """Enrich already-loaded result records using the selected engine."""
+    effective_engine = resolve_enrichment_engine(engine, rust_bin=rust_bin)
+    if effective_engine == "python":
+        vt_index = None
+        if vt_metadata_path is not None:
+            _metadata_path, vt_index = load_vt_metadata_index(vt_metadata_path)
+        notus_index = None
+        if notus_path is not None:
+            _paths, notus_index = load_notus_advisory_index(notus_path)
+        scap_cve_index = None
+        if scap_path is not None:
+            _paths, scap_cve_index = load_scap_cve_index(scap_path)
+        return enrich_results_python(results, vt_index, scap_cve_index, notus_index)
+
+    with tempfile.TemporaryDirectory(prefix="scan-enrich-results-") as tmpdir:
+        results_path = Path(tmpdir) / "results.json"
+        results_path.write_text(json.dumps(results), encoding="utf-8")
+        return _run_rust_enrichment(
+            results_path=results_path,
+            vt_metadata_path=vt_metadata_path,
+            scap_path=scap_path,
+            notus_path=notus_path,
+            rust_bin=rust_bin,
+        )
+
+
+def enrich_results_from_files_python(
     *,
     results_path: str | Path,
     vt_metadata_path: str | Path | None = None,
     scap_path: str | Path | None = None,
     notus_path: str | Path | None = None,
 ) -> list[dict[str, Any]]:
-    """Load inputs from disk and run the standard enrichment pipeline."""
+    """Reference Python implementation of the file-based enrichment pipeline."""
     if vt_metadata_path is None and notus_path is None:
         raise ValueError("At least one of vt_metadata_path or notus_path is required")
 
@@ -253,7 +404,37 @@ def enrich_results_from_files(
     scap_cve_index = None
     if scap_path is not None:
         _paths, scap_cve_index = load_scap_cve_index(scap_path)
-    return enrich_results(results, vt_index, scap_cve_index, notus_index)
+    return enrich_results_python(results, vt_index, scap_cve_index, notus_index)
+
+
+def enrich_results_from_files(
+    *,
+    results_path: str | Path,
+    vt_metadata_path: str | Path | None = None,
+    scap_path: str | Path | None = None,
+    notus_path: str | Path | None = None,
+    engine: str = "auto",
+    rust_bin: str | Path | None = None,
+) -> list[dict[str, Any]]:
+    """Load inputs from disk and run the standard enrichment pipeline."""
+    if vt_metadata_path is None and notus_path is None:
+        raise ValueError("At least one of vt_metadata_path or notus_path is required")
+
+    effective_engine = resolve_enrichment_engine(engine, rust_bin=rust_bin)
+    if effective_engine == "python":
+        return enrich_results_from_files_python(
+            results_path=results_path,
+            vt_metadata_path=vt_metadata_path,
+            scap_path=scap_path,
+            notus_path=notus_path,
+        )
+    return _run_rust_enrichment(
+        results_path=results_path,
+        vt_metadata_path=vt_metadata_path,
+        scap_path=scap_path,
+        notus_path=notus_path,
+        rust_bin=rust_bin,
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -278,6 +459,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--scap-path",
         help="Optional path to Greenbone/NVD SCAP CVE JSON data for CVE enrichment",
     )
+    parser.add_argument(
+        "--engine",
+        choices=ENRICHMENT_ENGINE_CHOICES,
+        default=os.environ.get(ENGINE_ENV, "auto"),
+        help="Enrichment engine to use: rust is preferred, python stays available as a reference path",
+    )
+    parser.add_argument(
+        "--rust-bin",
+        help="Optional explicit path to the scan-enrich-results Rust binary",
+    )
     parser.add_argument("--output", help="Write enriched JSON output to a file")
     return parser
 
@@ -293,6 +484,8 @@ def main(argv: list[str] | None = None) -> int:
         vt_metadata_path=args.vt_metadata,
         scap_path=args.scap_path,
         notus_path=args.notus_path,
+        engine=args.engine,
+        rust_bin=args.rust_bin,
     )
     rendered = json.dumps(enriched, indent=2, sort_keys=True)
     if args.output:

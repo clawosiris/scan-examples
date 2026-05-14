@@ -8,6 +8,7 @@ from scan_examples.enrichment import (
     extract_result_oid,
 )
 from scan_examples.feed import (
+    _extract_english_values,
     load_notus_advisory_index,
     load_scap_cve_index,
     load_vt_metadata_index,
@@ -21,6 +22,24 @@ def test_resolve_vt_metadata_path_supports_root_file(tmp_path):
     metadata_path.write_text("[]", encoding="utf-8")
 
     assert resolve_vt_metadata_path(tmp_path) == metadata_path
+
+
+def test_extract_english_values_prefers_english_over_non_english_fallback():
+    values = [
+        {"lang": "de", "value": "Deutscher Text"},
+        {"lang": "en", "value": "English text"},
+    ]
+
+    assert _extract_english_values(values) == ["English text"]
+
+
+def test_extract_english_values_falls_back_to_first_available_text():
+    values = [
+        {"lang": "de", "value": "Deutscher Text"},
+        {"lang": "fr", "value": "Texte français"},
+    ]
+
+    assert _extract_english_values(values) == ["Deutscher Text"]
 
 
 def test_load_vt_metadata_index_indexes_entries_by_oid(tmp_path):

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from .client import OpenVASAPIError, OpenVASScannerClient
-from .enrichment import enrich_results
+from .enrichment import enrich_results, enrich_results_records
 
 ProgressCallback = Callable[[str], None]
 SCAN_COMPLETION_MODES = {"first-results", "scan-complete"}
@@ -152,6 +152,11 @@ def run_lifecycle(
     vt_index: dict[str, dict[str, Any]] | None = None,
     notus_index: dict[str, list[dict[str, Any]]] | None = None,
     scap_cve_index: dict[str, dict[str, Any]] | None = None,
+    vt_metadata_path: str | None = None,
+    notus_path: str | None = None,
+    scap_path: str | None = None,
+    enrichment_engine: str = "python",
+    rust_bin: str | None = None,
     progress: ProgressCallback | None = None,
 ) -> E2EResult:
     """Run the full scan lifecycle used by the example CLI.
@@ -300,9 +305,25 @@ def run_lifecycle(
             raise RuntimeError(f"Scan {scan_id} completed without findings")
 
         findings_summary = summarize_results(results)
-        enriched_results = enrich_results(
-            results, vt_index, scap_cve_index, notus_index
-        )
+        if enrichment_engine == "python" and any(
+            index is not None for index in (vt_index, notus_index, scap_cve_index)
+        ):
+            enriched_results = enrich_results(
+                results, vt_index, scap_cve_index, notus_index
+            )
+        elif vt_metadata_path is not None or notus_path is not None:
+            enriched_results = enrich_results_records(
+                results=results,
+                vt_metadata_path=vt_metadata_path,
+                notus_path=notus_path,
+                scap_path=scap_path,
+                engine=enrichment_engine,
+                rust_bin=rust_bin,
+            )
+        else:
+            enriched_results = enrich_results(
+                results, vt_index, scap_cve_index, notus_index
+            )
 
         if completion_mode == "first-results":
             _emit(progress, f"Stopping scan {scan_id}")

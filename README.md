@@ -98,6 +98,7 @@ Required inputs:
 
 Optional inputs:
 - `--scap-path` — Greenbone/NVD SCAP CVE JSON data for second-stage CVE enrichment
+- `--engine {auto,python,rust}` — choose the enrichment engine; `auto` prefers Rust when the binary is available, while `python` keeps the readable reference implementation available
 - `--output` — output file; omit it to print enriched JSON to stdout
 
 ```bash
@@ -108,6 +109,9 @@ openvas-enrich-results \
   --scap-path /feed/scap-data \
   --output enriched-results.json
 ```
+
+By default the CLI and e2e flow prefer the Rust enrichment binary when it is present. The current
+Python implementation stays available as an explicit `--engine python` reference/debug path.
 
 The Python API is available from `scan_examples.enrichment` for callers that want to embed the
 same logic directly:
@@ -135,7 +139,7 @@ This command:
 3. Starts the scan
 4. Polls according to the configured completion mode: quick checks stop after first findings; full checks wait for the scan status to reach `succeeded`
 5. Fetches results in JSON format
-6. Enriches each result with matching NASL VT metadata from `vt-metadata.json` and/or matching Notus advisory metadata from `.notus` files when available
+6. Enriches each result with matching NASL VT metadata from `vt-metadata.json` and/or matching Notus advisory metadata from `.notus` files when available (Rust by default when bundled, Python optionally for reference/debugging)
 7. Stops the scan after first findings in quick mode, or lets it finish naturally in full mode
 8. Deletes the scan
 

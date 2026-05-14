@@ -14,7 +14,12 @@ from .conversion import (
     load_custom_scan_config,
 )
 from .e2e import dump_result, run_lifecycle
-from .enrichment import dump_pretty_enriched_results, enrich_results
+from .enrichment import (
+    dump_pretty_enriched_results,
+    enrich_results,
+    enrich_results_records,
+    resolve_enrichment_engine,
+)
 from .feed import load_notus_advisory_index, load_scap_cve_index, load_vt_metadata_index
 
 
@@ -242,16 +247,30 @@ def cmd_results(args: argparse.Namespace) -> int:
     """Fetch scan results and, when possible, enrich them with feed metadata."""
     client = _build_client(args)
     results = client.get_results(args.scan_id)
-    vt_index = _load_vt_index_for_cli(args.vt_path)
-    notus_index = _load_notus_index_for_cli(args.notus_path)
-    scap_cve_index = _load_scap_index_for_cli(args.scap_path)
+    enrichment_engine = resolve_enrichment_engine(
+        args.enrichment_engine, rust_bin=args.rust_bin
+    )
+    if enrichment_engine == "python":
+        vt_index = _load_vt_index_for_cli(args.vt_path)
+        notus_index = _load_notus_index_for_cli(args.notus_path)
+        scap_cve_index = _load_scap_index_for_cli(args.scap_path)
+        enriched_results = enrich_results(
+            results, vt_index, scap_cve_index, notus_index
+        )
+    else:
+        enriched_results = enrich_results_records(
+            results=results,
+            vt_metadata_path=args.vt_path,
+            scap_path=args.scap_path,
+            notus_path=args.notus_path,
+            engine=enrichment_engine,
+            rust_bin=args.rust_bin,
+        )
     _dump_json(
         {
             "scan_id": args.scan_id,
             "results": results,
-            "enriched_results": enrich_results(
-                results, vt_index, scap_cve_index, notus_index
-            ),
+            "enriched_results": enriched_results,
         },
         args.output,
     )
@@ -294,9 +313,20 @@ def cmd_e2e(args: argparse.Namespace) -> int:
         progress("No SSH credential configured for the target")
     progress("Discovering Greenbone community feed layout")
     layout = discover_feed_layout(args.data_objects_path, args.vt_path)
-    vt_index = _load_vt_index_for_cli(layout.vt_path, progress=progress)
-    notus_index = _load_notus_index_for_cli(args.notus_path, progress=progress)
-    scap_cve_index = _load_scap_index_for_cli(args.scap_path, progress=progress)
+    enrichment_engine = resolve_enrichment_engine(
+        args.enrichment_engine, rust_bin=args.rust_bin
+    )
+    progress(f"Using enrichment engine: {enrichment_engine}")
+    vt_index = None
+    notus_index = None
+    scap_cve_index = None
+    vt_metadata_path = layout.vt_path
+    notus_path = args.notus_path
+    scap_path = args.scap_path
+    if enrichment_engine == "python":
+        vt_index = _load_vt_index_for_cli(layout.vt_path, progress=progress)
+        notus_index = _load_notus_index_for_cli(args.notus_path, progress=progress)
+        scap_cve_index = _load_scap_index_for_cli(args.scap_path, progress=progress)
     if args.scan_config_json:
         progress("Loading custom scan configuration JSON")
         payload = load_custom_scan_config(
@@ -335,6 +365,11 @@ def cmd_e2e(args: argparse.Namespace) -> int:
         vt_index=vt_index,
         notus_index=notus_index,
         scap_cve_index=scap_cve_index,
+        vt_metadata_path=vt_metadata_path,
+        notus_path=notus_path,
+        scap_path=scap_path,
+        enrichment_engine=enrichment_engine,
+        rust_bin=args.rust_bin,
         progress=progress,
     )
     progress(f"Findings summary: {json.dumps(result.findings_summary, sort_keys=True)}")
@@ -397,6 +432,20 @@ def build_parser() -> argparse.ArgumentParser:
             "--notus-path",
             default=os.environ.get("NOTUS_PATH"),
             help="Optional path to a Notus advisory file or directory containing .notus files",
+        )
+
+    def add_enrichment_engine_flags(command: argparse.ArgumentParser) -> None:
+        """Register enrichment-engine selection flags."""
+        command.add_argument(
+            "--enrichment-engine",
+            choices=["auto", "python", "rust"],
+            default=os.environ.get("SCAN_EXAMPLES_ENRICHMENT_ENGINE", "auto"),
+            help="Prefer the Rust enrichment engine when available; keep Python as an explicit reference path",
+        )
+        command.add_argument(
+            "--rust-bin",
+            default=os.environ.get("SCAN_EXAMPLES_RUST_ENRICHMENT_BIN"),
+            help="Optional explicit path to the scan-enrich-results Rust binary",
         )
 
     def add_scan_config_flag(command: argparse.ArgumentParser) -> None:
@@ -491,6 +540,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_vt_path_flag(results)
     add_notus_path_flag(results)
     add_scap_path_flag(results)
+    add_enrichment_engine_flags(results)
     results.add_argument("scan_id")
     results.set_defaults(func=cmd_results)
 
@@ -505,6 +555,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_shared_api_flags(e2e)
     add_shared_feed_flags(e2e, include_output=False)
     add_notus_path_flag(e2e)
+    add_enrichment_engine_flags(e2e)
     e2e.add_argument(
         "--wait-before-results",
         type=_non_negative_float,

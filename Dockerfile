@@ -22,6 +22,15 @@ RUN set -eux; \
     echo "$sha256  /usr/local/bin/scannerctl" | sha256sum -c -; \
     chmod 0755 /usr/local/bin/scannerctl
 
+FROM rust:1.88-slim AS rust-builder
+
+WORKDIR /build
+
+COPY Cargo.toml ./
+COPY rust ./rust
+
+RUN cargo build --release -p scan-enrichment
+
 FROM python:3.11-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -39,6 +48,7 @@ RUN apt-get update \
 WORKDIR /app
 
 COPY --from=scannerctl-fetcher /usr/local/bin/scannerctl /usr/local/bin/scannerctl
+COPY --from=rust-builder /build/target/release/scan-enrich-results /usr/local/bin/scan-enrich-results
 COPY --from=ghcr.io/astral-sh/uv:0.11.3 /uv /uvx /bin/
 COPY pyproject.toml uv.lock README.md scan-docs.md ./
 COPY scanconfigs ./scanconfigs
