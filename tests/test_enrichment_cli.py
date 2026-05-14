@@ -1,6 +1,13 @@
 import json
 
-from scan_examples.enrichment import enrich_results_from_files, load_scan_results, main
+import pytest
+
+from scan_examples.enrichment import (
+    enrich_results_from_files,
+    load_scan_results,
+    main,
+    resolve_rust_enrichment_binary,
+)
 
 
 def test_load_scan_results_accepts_raw_result_list(tmp_path):
@@ -97,6 +104,37 @@ def test_enrich_results_from_files_supports_notus_only_enrichment(tmp_path):
     assert enriched[0]["notus-metadata-status"] == "matched"
     assert enriched[0]["notus-metadata"][0]["product_name"] == "Example OS"
     assert enriched[0]["cve-ids"] == []
+
+
+def test_rust_engine_matches_python_reference_output(tmp_path):
+    rust_bin = resolve_rust_enrichment_binary()
+    if rust_bin is None:
+        pytest.skip("Rust enrichment binary is not available in this test environment")
+
+    results_path = tmp_path / "results.json"
+    vt_metadata_path = tmp_path / "vt-metadata.json"
+    results_path.write_text(
+        json.dumps({"results": [{"id": 1, "oid": "1.2.3"}]}),
+        encoding="utf-8",
+    )
+    vt_metadata_path.write_text(
+        json.dumps([{"oid": "1.2.3", "name": "Example VT"}]),
+        encoding="utf-8",
+    )
+
+    python_payload = enrich_results_from_files(
+        results_path=results_path,
+        vt_metadata_path=vt_metadata_path,
+        engine="python",
+    )
+    rust_payload = enrich_results_from_files(
+        results_path=results_path,
+        vt_metadata_path=vt_metadata_path,
+        engine="rust",
+        rust_bin=rust_bin,
+    )
+
+    assert rust_payload == python_payload
 
 
 def test_standalone_enrichment_cli_writes_json_output(tmp_path):

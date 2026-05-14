@@ -306,6 +306,8 @@ def test_cmd_results_emits_enriched_json(monkeypatch, capsys):
     args = parser.parse_args(
         [
             "get-results",
+            "--enrichment-engine",
+            "python",
             "scan-123",
         ]
     )
