@@ -1,0 +1,27 @@
+{
+  "scan_id": "scan-123",
+  "results": [
+    {
+      "id": 1,
+      "oid": "1.2.3",
+      "type": "alarm",
+      "severity": "high",
+      "description": "VT-backed example finding"
+    },
+    {
+      "id": 2,
+      "nvt": {
+        "oid": "9.9.9"
+      },
+      "type": "alarm",
+      "severity": "medium",
+      "description": "Notus-backed example finding"
+    },
+    {
+      "id": 3,
+      "type": "log",
+      "severity": "low",
+      "description": "Result without OID should stay unenriched"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "id": "CVE-2026-0001",
+    "descriptions": [
+      {
+        "lang": "en",
+        "value": "VT example CVE"
+      }
+    ]
+  },
+  {
+    "id": "CVE-2026-0002",
+    "descriptions": [
+      {
+        "lang": "en",
+        "value": "Notus example CVE"
+      }
+    ]
+  }
+]

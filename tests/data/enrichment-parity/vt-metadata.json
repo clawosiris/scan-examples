@@ -1,0 +1,18 @@
+[
+  {
+    "oid": "1.2.3",
+    "name": "Example VT",
+    "filename": "example_vt.nasl",
+    "family": "General",
+    "category": "gather_info",
+    "references": [
+      {
+        "class": "cve",
+        "id": "CVE-2026-0001"
+      }
+    ],
+    "tag": {
+      "summary": "Example VT summary"
+    }
+  }
+]

@@ -1,0 +1,21 @@
+{
+  "version": "1.0",
+  "package_type": "rpm",
+  "product_name": "Example OS",
+  "advisories": [
+    {
+      "oid": "9.9.9",
+      "title": "Example Notus advisory",
+      "advisory_id": "EB-SA-2026:0001",
+      "summary": "Example Notus advisory summary.",
+      "cves": [
+        "CVE-2026-0002"
+      ],
+      "fixed_packages": [
+        {
+          "full_name": "example-pkg-2.0-1.x86_64"
+        }
+      ]
+    }
+  ]
+}
