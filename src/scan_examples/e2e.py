@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""End-to-end scan lifecycle helpers used by the example CLI and tests."""
+
 import json
 import time
 from dataclasses import dataclass
@@ -16,6 +18,8 @@ SUCCESS_SCAN_STATUSES = {"succeeded"}
 
 @dataclass(slots=True)
 class E2EResult:
+    """Collected data from one end-to-end example run."""
+
     scan_id: str
     create_response: Any
     start_response: Any
@@ -27,6 +31,7 @@ class E2EResult:
     delete_response: Any
 
     def to_dict(self) -> dict[str, Any]:
+        """Convert the dataclass into the JSON-friendly shape used by the CLI."""
         return {
             "scan_id": self.scan_id,
             "create_response": self.create_response,
@@ -41,11 +46,13 @@ class E2EResult:
 
 
 def _emit(progress: ProgressCallback | None, message: str) -> None:
+    """Send a progress message when the caller asked for streaming updates."""
     if progress is not None:
         progress(message)
 
 
 def _coerce_score(value: Any) -> float | None:
+    """Parse a numeric severity score from strings or numeric values."""
     if isinstance(value, (int, float)):
         return float(value)
     if isinstance(value, str):
@@ -57,6 +64,7 @@ def _coerce_score(value: Any) -> float | None:
 
 
 def _score_to_severity(score: float) -> str:
+    """Map a numeric score onto a coarse severity bucket."""
     if score >= 9.0:
         return "critical"
     if score >= 7.0:
@@ -69,6 +77,7 @@ def _score_to_severity(score: float) -> str:
 
 
 def _extract_severity_label(result: dict[str, Any]) -> str:
+    """Derive a human-friendly severity label from varying result schemas."""
     for key in ("severity", "threat", "level"):
         value = result.get(key)
         if isinstance(value, str) and value.strip():
@@ -91,6 +100,7 @@ def _extract_severity_label(result: dict[str, Any]) -> str:
 
 
 def _extract_status_phase(status: dict[str, Any] | None) -> str | None:
+    """Extract the normalized status phase string from a status payload."""
     if not status:
         return None
     value = status.get("status")
@@ -98,16 +108,19 @@ def _extract_status_phase(status: dict[str, Any] | None) -> str | None:
 
 
 def _status_is_running(status: dict[str, Any] | None) -> bool:
+    """Return ``True`` while the scanner still reports an active phase."""
     phase = _extract_status_phase(status)
     return phase in RUNNING_SCAN_STATUSES
 
 
 def _status_is_success(status: dict[str, Any] | None) -> bool:
+    """Return ``True`` when the scanner reported successful completion."""
     phase = _extract_status_phase(status)
     return phase in SUCCESS_SCAN_STATUSES
 
 
 def summarize_results(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Build a tiny aggregate summary grouped by severity and finding type."""
     summary = {
         "total": len(results),
         "by_severity": {},
@@ -142,6 +155,11 @@ def run_lifecycle(
     scap_cve_index: dict[str, dict[str, Any]] | None = None,
     progress: ProgressCallback | None = None,
 ) -> E2EResult:
+    """Run the full scan lifecycle used by the example CLI.
+
+    The function is intentionally verbose so humans can follow the sequence:
+    create, start, poll, enrich, stop if needed, and finally delete.
+    """
     wait_before_results = max(wait_before_results, 0)
     create_retry_delay = max(create_retry_delay, 0)
     results_timeout = max(results_timeout, 0)
@@ -198,6 +216,8 @@ def run_lifecycle(
         attempts = 0
         while True:
             attempts += 1
+            # Polling continues until we either hit the requested completion
+            # condition or run out of patience and time out.
             _emit(progress, f"Fetching results for {scan_id} (poll {attempts})")
             results = client.get_results(scan_id)
             now = time.monotonic()
@@ -212,6 +232,9 @@ def run_lifecycle(
                 findings_seen = True
 
             if completion_mode == "scan-complete":
+                # In full completion mode we trust the scanner status endpoint,
+                # not just the presence of findings, because results can appear
+                # before the scan has naturally finished.
                 final_status = client.get_scan_status(scan_id)
                 phase = _extract_status_phase(final_status) or "unknown"
                 _emit(progress, f"Scan {scan_id} status: {phase}")
@@ -291,6 +314,8 @@ def run_lifecycle(
         )
     except Exception:
         if scan_id:
+            # Best-effort cleanup matters here because this example is often run
+            # repeatedly in CI or local labs where orphaned scans become noise.
             if not findings_seen:
                 _emit(progress, f"No findings before timeout; stopping scan {scan_id}")
             if stop_response is None:
@@ -310,4 +335,5 @@ def run_lifecycle(
 
 
 def dump_result(result: E2EResult) -> str:
+    """Render an :class:`E2EResult` as stable, readable JSON."""
     return json.dumps(result.to_dict(), indent=2, sort_keys=True)
