@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import pytest
 
 from scan_examples.e2e import E2EResult, dump_result, run_lifecycle, summarize_results
@@ -8,10 +6,15 @@ from scan_examples.e2e import E2EResult, dump_result, run_lifecycle, summarize_r
 class DummyClient:
     def __init__(self, results_sequence=None, status_sequence=None) -> None:
         self.calls: list[tuple[str, object]] = []
-        self.results_sequence = list(results_sequence or [[
-            {"id": 1, "oid": "1.2.3", "type": "alarm", "severity": "high"},
-            {"id": 2, "type": "log", "cvss": 9.3},
-        ]])
+        self.results_sequence = list(
+            results_sequence
+            or [
+                [
+                    {"id": 1, "oid": "1.2.3", "type": "alarm", "severity": "high"},
+                    {"id": 2, "type": "log", "cvss": 9.3},
+                ]
+            ]
+        )
         self.status_sequence = list(status_sequence or [{"status": "running"}])
 
     def create_scan(self, payload):
@@ -75,7 +78,11 @@ def test_dump_result_is_machine_readable():
                 "notus-metadata": [],
             }
         ],
-        findings_summary={"total": 1, "by_severity": {"unknown": 1}, "by_type": {"alarm": 1}},
+        findings_summary={
+            "total": 1,
+            "by_severity": {"unknown": 1},
+            "by_type": {"alarm": 1},
+        },
         delete_response={"status": "deleted"},
     )
 
@@ -116,9 +123,13 @@ def test_run_lifecycle_emits_progress_in_order(monkeypatch):
     )
     messages: list[str] = []
     sleeps: list[float] = []
-    monkeypatch.setattr("scan_examples.e2e.time.sleep", lambda seconds: sleeps.append(seconds))
+    monkeypatch.setattr(
+        "scan_examples.e2e.time.sleep", lambda seconds: sleeps.append(seconds)
+    )
     monotonic_values = iter([0.0, 1.0, 2.0])
-    monkeypatch.setattr("scan_examples.e2e.time.monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(
+        "scan_examples.e2e.time.monotonic", lambda: next(monotonic_values)
+    )
 
     result = run_lifecycle(
         client=client,
@@ -165,9 +176,13 @@ def test_run_lifecycle_waits_for_minimum_first_results(monkeypatch):
     client = DummyClient(results_sequence=[initial_results, enough_results])
     messages: list[str] = []
     sleeps: list[float] = []
-    monkeypatch.setattr("scan_examples.e2e.time.sleep", lambda seconds: sleeps.append(seconds))
+    monkeypatch.setattr(
+        "scan_examples.e2e.time.sleep", lambda seconds: sleeps.append(seconds)
+    )
     monotonic_values = iter([0.0, 1.0, 2.0])
-    monkeypatch.setattr("scan_examples.e2e.time.monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(
+        "scan_examples.e2e.time.monotonic", lambda: next(monotonic_values)
+    )
 
     result = run_lifecycle(
         client=client,
@@ -181,7 +196,10 @@ def test_run_lifecycle_waits_for_minimum_first_results(monkeypatch):
 
     assert result.findings_summary["total"] == 1000
     assert sleeps == [5]
-    assert "Fetched 999 findings; waiting for at least 1000 before retrying in 5s" in messages
+    assert (
+        "Fetched 999 findings; waiting for at least 1000 before retrying in 5s"
+        in messages
+    )
 
 
 def test_run_lifecycle_can_wait_for_scan_completion(monkeypatch):
@@ -197,9 +215,13 @@ def test_run_lifecycle_can_wait_for_scan_completion(monkeypatch):
     )
     messages: list[str] = []
     sleeps: list[float] = []
-    monkeypatch.setattr("scan_examples.e2e.time.sleep", lambda seconds: sleeps.append(seconds))
+    monkeypatch.setattr(
+        "scan_examples.e2e.time.sleep", lambda seconds: sleeps.append(seconds)
+    )
     monotonic_values = iter([0.0, 1.0, 2.0])
-    monkeypatch.setattr("scan_examples.e2e.time.monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(
+        "scan_examples.e2e.time.monotonic", lambda: next(monotonic_values)
+    )
 
     result = run_lifecycle(
         client=client,
@@ -230,9 +252,13 @@ def test_run_lifecycle_stops_scan_when_findings_stall(monkeypatch):
     )
     messages: list[str] = []
     sleeps: list[float] = []
-    monkeypatch.setattr("scan_examples.e2e.time.sleep", lambda seconds: sleeps.append(seconds))
+    monkeypatch.setattr(
+        "scan_examples.e2e.time.sleep", lambda seconds: sleeps.append(seconds)
+    )
     monotonic_values = iter([0.0, 1.0, 1502.0])
-    monkeypatch.setattr("scan_examples.e2e.time.monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(
+        "scan_examples.e2e.time.monotonic", lambda: next(monotonic_values)
+    )
 
     result = run_lifecycle(
         client=client,
@@ -253,7 +279,9 @@ def test_run_lifecycle_stops_scan_when_findings_stall(monkeypatch):
 
 
 def test_run_lifecycle_fails_when_completed_scan_has_no_findings(monkeypatch):
-    client = DummyClient(results_sequence=[[]], status_sequence=[{"status": "succeeded"}])
+    client = DummyClient(
+        results_sequence=[[]], status_sequence=[{"status": "succeeded"}]
+    )
     messages: list[str] = []
     monkeypatch.setattr("scan_examples.e2e.time.sleep", lambda seconds: None)
     monkeypatch.setattr("scan_examples.e2e.time.monotonic", lambda: 0.0)
@@ -275,7 +303,9 @@ def test_run_lifecycle_stops_and_deletes_on_timeout(monkeypatch):
     messages: list[str] = []
     monkeypatch.setattr("scan_examples.e2e.time.sleep", lambda _seconds: None)
     monotonic_values = iter([0.0, 301.0])
-    monkeypatch.setattr("scan_examples.e2e.time.monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(
+        "scan_examples.e2e.time.monotonic", lambda: next(monotonic_values)
+    )
 
     with pytest.raises(RuntimeError, match="Timed out after 300s waiting for findings"):
         run_lifecycle(
@@ -307,11 +337,15 @@ def test_run_lifecycle_stops_and_deletes_on_timeout(monkeypatch):
 
 
 def test_run_lifecycle_clamps_negative_poll_interval(monkeypatch):
-    client = DummyClient(results_sequence=[[], [{"id": 1, "type": "alarm", "severity": "high"}]])
+    client = DummyClient(
+        results_sequence=[[], [{"id": 1, "type": "alarm", "severity": "high"}]]
+    )
     messages: list[str] = []
     monkeypatch.setattr("scan_examples.e2e.time.sleep", lambda _seconds: None)
     monotonic_values = iter([0.0, 1.0, 2.0])
-    monkeypatch.setattr("scan_examples.e2e.time.monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(
+        "scan_examples.e2e.time.monotonic", lambda: next(monotonic_values)
+    )
 
     run_lifecycle(
         client=client,

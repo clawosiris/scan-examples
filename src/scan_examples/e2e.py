@@ -1,7 +1,5 @@
 """End-to-end scan lifecycle helpers used by the example CLI and tests."""
 
-from __future__ import annotations
-
 import json
 import time
 from dataclasses import dataclass
@@ -199,7 +197,9 @@ def run_lifecycle(
                 _emit(progress, f"Create scan attempt {attempt} failed: {exc}")
                 time.sleep(create_retry_delay)
         else:
-            raise RuntimeError(f"Failed to create scan after {create_retries} attempts: {last_error}")
+            raise RuntimeError(
+                f"Failed to create scan after {create_retries} attempts: {last_error}"
+            )
 
         create_response = {"id": scan_id}
         _emit(progress, f"Created scan {scan_id}")
@@ -208,7 +208,10 @@ def run_lifecycle(
         start_response = client.start_scan(scan_id)
 
         if wait_before_results > 0:
-            _emit(progress, f"Initial wait {wait_before_results:g}s before polling for results")
+            _emit(
+                progress,
+                f"Initial wait {wait_before_results:g}s before polling for results",
+            )
             time.sleep(wait_before_results)
 
         start_polling_at = time.monotonic()
@@ -224,7 +227,10 @@ def run_lifecycle(
             now = time.monotonic()
             findings_count = len(results)
             if findings_count > last_findings_count:
-                _emit(progress, f"Findings increased from {last_findings_count} to {findings_count}")
+                _emit(
+                    progress,
+                    f"Findings increased from {last_findings_count} to {findings_count}",
+                )
                 last_findings_count = findings_count
                 last_findings_increment_at = now
             if results:
@@ -241,13 +247,16 @@ def run_lifecycle(
                 _emit(progress, f"Scan {scan_id} status: {phase}")
                 if not _status_is_running(final_status):
                     if not _status_is_success(final_status):
-                        raise RuntimeError(f"Scan {scan_id} finished with status {phase}")
+                        raise RuntimeError(
+                            f"Scan {scan_id} finished with status {phase}"
+                        )
                     completion_reason = "scan_completed"
                     break
                 if (
                     no_findings_increment_timeout > 0
                     and last_findings_increment_at is not None
-                    and now - last_findings_increment_at >= no_findings_increment_timeout
+                    and now - last_findings_increment_at
+                    >= no_findings_increment_timeout
                 ):
                     completion_reason = "findings_stalled"
                     _emit(
@@ -260,7 +269,11 @@ def run_lifecycle(
                 break
 
             if now >= deadline:
-                wait_target = "scan completion" if completion_mode == "scan-complete" else "findings"
+                wait_target = (
+                    "scan completion"
+                    if completion_mode == "scan-complete"
+                    else "findings"
+                )
                 raise RuntimeError(
                     f"Timed out after {results_timeout:g}s waiting for {wait_target} for scan {scan_id}"
                 )
@@ -277,7 +290,10 @@ def run_lifecycle(
                     f"before retrying in {results_poll_interval:g}s",
                 )
             else:
-                _emit(progress, f"No findings yet; waiting {results_poll_interval:g}s before retrying")
+                _emit(
+                    progress,
+                    f"No findings yet; waiting {results_poll_interval:g}s before retrying",
+                )
             time.sleep(results_poll_interval)
 
         if not results:

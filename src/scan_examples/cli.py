@@ -1,7 +1,5 @@
 """Command-line entry points for the scan examples package."""
 
-from __future__ import annotations
-
 import argparse
 import json
 import os
@@ -10,7 +8,11 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .client import OpenVASScannerClient
-from .conversion import convert_scan_config, discover_feed_layout, load_custom_scan_config
+from .conversion import (
+    convert_scan_config,
+    discover_feed_layout,
+    load_custom_scan_config,
+)
 from .e2e import dump_result, run_lifecycle
 from .enrichment import dump_pretty_enriched_results, enrich_results
 from .feed import load_notus_advisory_index, load_scap_cve_index, load_vt_metadata_index
@@ -63,7 +65,9 @@ def _parse_ports(raw: str | None) -> list[int]:
     return [int(part.strip()) for part in raw.split(",") if part.strip()]
 
 
-def _load_scap_index_for_cli(scap_path: str | None, progress: Callable[[str], None] | None = None) -> dict[str, dict[str, Any]] | None:
+def _load_scap_index_for_cli(
+    scap_path: str | None, progress: Callable[[str], None] | None = None
+) -> dict[str, dict[str, Any]] | None:
     """Load SCAP CVE data, but degrade gracefully when it is unavailable."""
     if not scap_path:
         return None
@@ -71,11 +75,15 @@ def _load_scap_index_for_cli(scap_path: str | None, progress: Callable[[str], No
         paths, cve_index = load_scap_cve_index(scap_path)
     except FileNotFoundError:
         if progress is not None:
-            progress(f"SCAP data not found under {scap_path}; continuing without CVE enrichment")
+            progress(
+                f"SCAP data not found under {scap_path}; continuing without CVE enrichment"
+            )
         return None
     except (json.JSONDecodeError, ValueError, OSError) as exc:
         if progress is not None:
-            progress(f"Failed to load SCAP CVE data from {scap_path}: {exc}; continuing without CVE enrichment")
+            progress(
+                f"Failed to load SCAP CVE data from {scap_path}: {exc}; continuing without CVE enrichment"
+            )
         return None
 
     if progress is not None:
@@ -83,17 +91,23 @@ def _load_scap_index_for_cli(scap_path: str | None, progress: Callable[[str], No
     return cve_index
 
 
-def _load_vt_index_for_cli(vt_path: str, progress: Callable[[str], None] | None = None) -> dict[str, dict[str, Any]] | None:
+def _load_vt_index_for_cli(
+    vt_path: str, progress: Callable[[str], None] | None = None
+) -> dict[str, dict[str, Any]] | None:
     """Load VT metadata, but keep the CLI usable even when enrichment is missing."""
     try:
         metadata_path, vt_index = load_vt_metadata_index(vt_path)
     except FileNotFoundError:
         if progress is not None:
-            progress(f"VT metadata file not found under {vt_path}; continuing without enrichment")
+            progress(
+                f"VT metadata file not found under {vt_path}; continuing without enrichment"
+            )
         return None
     except (json.JSONDecodeError, ValueError) as exc:
         if progress is not None:
-            progress(f"Failed to load VT metadata from {vt_path}: {exc}; continuing without enrichment")
+            progress(
+                f"Failed to load VT metadata from {vt_path}: {exc}; continuing without enrichment"
+            )
         return None
 
     if progress is not None:
@@ -163,7 +177,6 @@ def _convert_with_fallback(
             ssh_port=ssh_port,
             scannerctl_bin=scannerctl_bin,
         )
-
 
 
 def cmd_convert(args: argparse.Namespace) -> int:
@@ -239,7 +252,9 @@ def cmd_delete(args: argparse.Namespace) -> int:
     """Delete a scan."""
     client = _build_client(args)
     response = client.delete_scan(args.scan_id)
-    _dump_json({"scan_id": args.scan_id, "deleted": True, "response": response}, args.output)
+    _dump_json(
+        {"scan_id": args.scan_id, "deleted": True, "response": response}, args.output
+    )
     return 0
 
 
@@ -250,7 +265,11 @@ def cmd_e2e(args: argparse.Namespace) -> int:
         print(f"[e2e] {message}", file=sys.stderr, flush=True)
 
     tcp_ports = _parse_ports(args.tcp_ports)
-    ports_rendered = ", ".join(str(port) for port in tcp_ports) if tcp_ports else "default ports from the scan config"
+    ports_rendered = (
+        ", ".join(str(port) for port in tcp_ports)
+        if tcp_ports
+        else "default ports from the scan config"
+    )
     progress(f"Target hosts: {', '.join(args.host)}")
     progress(f"Scanning TCP ports: {ports_rendered}")
     if args.scan_config_json:
@@ -258,7 +277,9 @@ def cmd_e2e(args: argparse.Namespace) -> int:
     else:
         progress(f"Using scan config: {args.scan_config}")
     if args.ssh_username and args.ssh_password:
-        progress(f"Using SSH credential for {args.ssh_username}@{', '.join(args.host)}:{args.ssh_port}")
+        progress(
+            f"Using SSH credential for {args.ssh_username}@{', '.join(args.host)}:{args.ssh_port}"
+        )
     else:
         progress("No SSH credential configured for the target")
     progress("Discovering Greenbone community feed layout")
@@ -307,7 +328,9 @@ def cmd_e2e(args: argparse.Namespace) -> int:
         progress=progress,
     )
     progress(f"Findings summary: {json.dumps(result.findings_summary, sort_keys=True)}")
-    progress(f"Enriched findings:\n{dump_pretty_enriched_results(result.enriched_results)}")
+    progress(
+        f"Enriched findings:\n{dump_pretty_enriched_results(result.enriched_results)}"
+    )
     rendered = dump_result(result)
     if args.output:
         Path(args.output).write_text(rendered + "\n", encoding="utf-8")
@@ -374,7 +397,9 @@ def build_parser() -> argparse.ArgumentParser:
             help="Scan configuration to convert (default: full-and-fast)",
         )
 
-    def add_shared_feed_flags(command: argparse.ArgumentParser, *, include_output: bool = True) -> None:
+    def add_shared_feed_flags(
+        command: argparse.ArgumentParser, *, include_output: bool = True
+    ) -> None:
         """Register flags shared by feed-backed conversion and e2e commands."""
         command.add_argument(
             "--data-objects-path",
@@ -418,7 +443,9 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument(
             "--ssh-port",
             type=int,
-            default=int(os.environ.get("TARGET_SSH_PORT", str(DEFAULT_TARGET_SSH_PORT))),
+            default=int(
+                os.environ.get("TARGET_SSH_PORT", str(DEFAULT_TARGET_SSH_PORT))
+            ),
             help="SSH port to include in the scan target credentials",
         )
         if include_output:
@@ -426,11 +453,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="command")
 
-    convert = subparsers.add_parser("convert-config", help="Convert a scan config to scan JSON")
+    convert = subparsers.add_parser(
+        "convert-config", help="Convert a scan config to scan JSON"
+    )
     add_shared_feed_flags(convert)
     convert.set_defaults(func=cmd_convert)
 
-    create = subparsers.add_parser("create-scan", help="Create a scan from a JSON payload file")
+    create = subparsers.add_parser(
+        "create-scan", help="Create a scan from a JSON payload file"
+    )
     add_shared_api_flags(create)
     create.add_argument("scan_json", help="Path to a scan JSON payload file")
     create.set_defaults(func=cmd_create)
@@ -458,7 +489,9 @@ def build_parser() -> argparse.ArgumentParser:
     delete.add_argument("scan_id")
     delete.set_defaults(func=cmd_delete)
 
-    e2e = subparsers.add_parser("e2e", help="Run the full create/start/stop/results/delete lifecycle")
+    e2e = subparsers.add_parser(
+        "e2e", help="Run the full create/start/stop/results/delete lifecycle"
+    )
     add_shared_api_flags(e2e)
     add_shared_feed_flags(e2e, include_output=False)
     add_notus_path_flag(e2e)
@@ -495,7 +528,9 @@ def build_parser() -> argparse.ArgumentParser:
     e2e.add_argument(
         "--no-findings-increment-timeout",
         type=_non_negative_float,
-        default=_non_negative_float(os.environ.get("E2E_NO_FINDINGS_INCREMENT_TIMEOUT", "0")),
+        default=_non_negative_float(
+            os.environ.get("E2E_NO_FINDINGS_INCREMENT_TIMEOUT", "0")
+        ),
         help="For scan-complete mode, stop after this many seconds without an increase in finding count; 0 disables",
     )
     e2e.add_argument(

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import json
 from types import SimpleNamespace
 
@@ -14,7 +12,15 @@ class DummySession:
         self.calls = []
 
     def request(self, method, url, timeout, verify, **kwargs):
-        self.calls.append({"method": method, "url": url, "timeout": timeout, "verify": verify, **kwargs})
+        self.calls.append(
+            {
+                "method": method,
+                "url": url,
+                "timeout": timeout,
+                "verify": verify,
+                **kwargs,
+            }
+        )
         return self._responses.pop(0)
 
 
@@ -40,7 +46,6 @@ def test_create_scan_returns_id():
     assert client.create_scan({"target": {}, "vts": []}) == "scan-123"
 
 
-
 def test_create_scan_accepts_raw_string_id():
     client = OpenVASScannerClient("http://scanner")
     client.session = DummySession([make_response(payload="scan-123")])
@@ -64,7 +69,9 @@ def test_get_scan_status_returns_status_payload():
 
 def test_error_response_raises():
     client = OpenVASScannerClient("http://scanner")
-    client.session = DummySession([make_response(status_code=500, payload={"error": "boom"})])
+    client.session = DummySession(
+        [make_response(status_code=500, payload={"error": "boom"})]
+    )
 
     with pytest.raises(OpenVASAPIError):
         client.get_results("scan-123")

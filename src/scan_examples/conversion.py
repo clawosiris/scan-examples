@@ -1,7 +1,5 @@
 """Helpers for turning feed data and scanner configs into scan payloads."""
 
-from __future__ import annotations
-
 import json
 import os
 import subprocess
@@ -59,9 +57,14 @@ def _resolve_vt_path(root: Path) -> Path:
     return root
 
 
-def discover_feed_layout(data_objects_path: str | os.PathLike[str], vt_path: str | os.PathLike[str]) -> FeedLayout:
+def discover_feed_layout(
+    data_objects_path: str | os.PathLike[str], vt_path: str | os.PathLike[str]
+) -> FeedLayout:
     """Build a :class:`FeedLayout` from the configured feed paths."""
-    return FeedLayout(data_objects_path=Path(data_objects_path), vt_path=_resolve_vt_path(Path(vt_path)))
+    return FeedLayout(
+        data_objects_path=Path(data_objects_path),
+        vt_path=_resolve_vt_path(Path(vt_path)),
+    )
 
 
 def build_target_payload(
@@ -174,10 +177,10 @@ def load_custom_scan_config(
 def _write_portlist_xml(tcp_ports: list[int]) -> Path:
     """Create a temporary scannerctl-compatible XML port list file."""
     ranges = "\n".join(
-        f'''    <port_range id="generated-{index}">\n      <start>{int(port)}</start>\n      <end>{int(port)}</end>\n      <type>tcp</type>\n      <comment/>\n    </port_range>'''
+        f"""    <port_range id="generated-{index}">\n      <start>{int(port)}</start>\n      <end>{int(port)}</end>\n      <type>tcp</type>\n      <comment/>\n    </port_range>"""
         for index, port in enumerate(tcp_ports, start=1)
     )
-    xml = f'''<port_list id="generated-openvas-example">\n  <name>Generated OpenVAS Example Port List</name>\n  <comment>Generated from requested TCP ports.</comment>\n  <port_ranges>\n{ranges}\n  </port_ranges>\n</port_list>\n'''
+    xml = f"""<port_list id="generated-openvas-example">\n  <name>Generated OpenVAS Example Port List</name>\n  <comment>Generated from requested TCP ports.</comment>\n  <port_ranges>\n{ranges}\n  </port_ranges>\n</port_list>\n"""
     with tempfile.NamedTemporaryFile("w", suffix=".xml", delete=False) as handle:
         handle.write(xml)
         return Path(handle.name)
@@ -251,7 +254,9 @@ def convert_scan_config(
         generated_portlist = _write_portlist_xml(tcp_ports)
         portlist = generated_portlist
     else:
-        portlist = _first_existing(layout.data_objects_path, OPENVAS_DEFAULT_PORTLIST_FILENAMES)
+        portlist = _first_existing(
+            layout.data_objects_path, OPENVAS_DEFAULT_PORTLIST_FILENAMES
+        )
     base_payload = build_target_payload(
         hosts,
         tcp_ports=tcp_ports,

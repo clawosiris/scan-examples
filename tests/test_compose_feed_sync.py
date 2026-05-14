@@ -26,7 +26,10 @@ def test_compose_mounts_feed_sync_outputs_to_persistent_runtime_volumes():
     assert "vt_data_vol:/feed/vulnerability-tests:ro" in COMPOSE
     assert "notus_data_vol:/var/lib/notus:ro" in COMPOSE
 
-    assert "greenbone-feed-sync:\n        condition: service_completed_successfully" in COMPOSE
+    assert (
+        "greenbone-feed-sync:\n        condition: service_completed_successfully"
+        in COMPOSE
+    )
 
 
 def test_ci_runs_feed_sync_before_scanner_stack_and_keeps_feed_volumes():

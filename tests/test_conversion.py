@@ -1,9 +1,13 @@
-from __future__ import annotations
-
 import json
 from pathlib import Path
 
-from scan_examples.conversion import build_target_payload, convert_full_and_fast, convert_scan_config, discover_feed_layout, load_custom_scan_config
+from scan_examples.conversion import (
+    build_target_payload,
+    convert_full_and_fast,
+    convert_scan_config,
+    discover_feed_layout,
+    load_custom_scan_config,
+)
 
 
 FULL_AND_FAST = "full-and-fast-daba56c8-73ec-11df-a475-002264764cea.xml"
@@ -43,14 +47,20 @@ def test_build_target_payload_includes_ssh_credentials():
 
 def test_load_custom_scan_config_overrides_hosts_and_credentials(tmp_path):
     custom_config = tmp_path / "scan.json"
-    custom_config.write_text(json.dumps({
-        "target": {
-            "hosts": [],
-            "ports": [{"protocol": "tcp", "range": [{"start": 1, "end": 65535}]}],
-            "credentials": [],
-        },
-        "vts": [{"oid": "1.2.3", "parameters": []}],
-    }))
+    custom_config.write_text(
+        json.dumps(
+            {
+                "target": {
+                    "hosts": [],
+                    "ports": [
+                        {"protocol": "tcp", "range": [{"start": 1, "end": 65535}]}
+                    ],
+                    "credentials": [],
+                },
+                "vts": [{"oid": "1.2.3", "parameters": []}],
+            }
+        )
+    )
 
     payload = load_custom_scan_config(
         custom_config,
@@ -61,9 +71,15 @@ def test_load_custom_scan_config_overrides_hosts_and_credentials(tmp_path):
     )
 
     assert payload["target"]["hosts"] == ["target"]
-    assert payload["target"]["ports"] == [{"protocol": "tcp", "range": [{"start": 1, "end": 65535}]}]
+    assert payload["target"]["ports"] == [
+        {"protocol": "tcp", "range": [{"start": 1, "end": 65535}]}
+    ]
     assert payload["target"]["credentials"] == [
-        {"service": "ssh", "port": 22, "up": {"username": "msfadmin", "password": "msfadmin"}}
+        {
+            "service": "ssh",
+            "port": 22,
+            "up": {"username": "msfadmin", "password": "msfadmin"},
+        }
     ]
     assert payload["vts"] == [{"oid": "1.2.3", "parameters": []}]
 
@@ -73,7 +89,10 @@ def test_load_custom_scan_config_can_override_ports_from_zip(tmp_path):
 
     archive_path = tmp_path / "scan.zip"
     payload = {
-        "target": {"hosts": [], "ports": [{"protocol": "tcp", "range": [{"start": 1, "end": 65535}]}]},
+        "target": {
+            "hosts": [],
+            "ports": [{"protocol": "tcp", "range": [{"start": 1, "end": 65535}]}],
+        },
         "vts": [],
     }
     with zipfile.ZipFile(archive_path, "w") as archive:
@@ -83,7 +102,9 @@ def test_load_custom_scan_config_can_override_ports_from_zip(tmp_path):
     loaded = load_custom_scan_config(archive_path, hosts=["target"], tcp_ports=[22, 80])
 
     assert loaded["target"]["hosts"] == ["target"]
-    assert loaded["target"]["ports"] == [{"protocol": "tcp", "range": [{"start": 22}, {"start": 80}]}]
+    assert loaded["target"]["ports"] == [
+        {"protocol": "tcp", "range": [{"start": 22}, {"start": 80}]}
+    ]
 
 
 def test_discover_feed_layout_resolves_nested_vt_path(tmp_path):
@@ -113,7 +134,9 @@ def test_convert_full_and_fast_invokes_scannerctl(tmp_path, monkeypatch):
 
     class Result:
         returncode = 0
-        stdout = json.dumps({"target": {"hosts": ["example"]}, "vts": [{"oid": "1.2.3"}]})
+        stdout = json.dumps(
+            {"target": {"hosts": ["example"]}, "vts": [{"oid": "1.2.3"}]}
+        )
         stderr = ""
 
     def fake_run(command, input, text, capture_output, check):
@@ -159,7 +182,9 @@ def test_convert_full_and_fast_generates_portlist_from_tcp_ports(tmp_path, monke
 
     class Result:
         returncode = 0
-        stdout = json.dumps({"target": {"hosts": ["example"]}, "vts": [{"oid": "1.2.3"}]})
+        stdout = json.dumps(
+            {"target": {"hosts": ["example"]}, "vts": [{"oid": "1.2.3"}]}
+        )
         stderr = ""
 
     def fake_run(command, input, text, capture_output, check):
@@ -186,7 +211,9 @@ def test_convert_full_and_fast_generates_portlist_from_tcp_ports(tmp_path, monke
     assert captured["command"][-1].endswith(FULL_AND_FAST)
 
 
-def test_convert_scan_config_uses_feed_default_portlist_without_tcp_ports(tmp_path, monkeypatch):
+def test_convert_scan_config_uses_feed_default_portlist_without_tcp_ports(
+    tmp_path, monkeypatch
+):
     data_objects = tmp_path / "data-objects"
     vt_path = tmp_path / "vulnerability-tests"
     scan_configs = data_objects / "scan-configs"
@@ -202,7 +229,9 @@ def test_convert_scan_config_uses_feed_default_portlist_without_tcp_ports(tmp_pa
 
     class Result:
         returncode = 0
-        stdout = json.dumps({"target": {"hosts": ["example"]}, "vts": [{"oid": "1.2.3"}]})
+        stdout = json.dumps(
+            {"target": {"hosts": ["example"]}, "vts": [{"oid": "1.2.3"}]}
+        )
         stderr = ""
 
     def fake_run(command, input, text, capture_output, check):
@@ -245,7 +274,9 @@ def test_convert_scan_config_retries_with_legacy_scannerctl_cli(tmp_path, monkey
 
     class SuccessResult:
         returncode = 0
-        stdout = json.dumps({"target": {"hosts": ["example"]}, "vts": [{"oid": "1.2.3"}]})
+        stdout = json.dumps(
+            {"target": {"hosts": ["example"]}, "vts": [{"oid": "1.2.3"}]}
+        )
         stderr = ""
 
     def fake_run(command, input, text, capture_output, check):
@@ -286,7 +317,9 @@ def test_convert_scan_config_resolves_named_scan_config(tmp_path, monkeypatch):
 
     class Result:
         returncode = 0
-        stdout = json.dumps({"target": {"hosts": ["example"]}, "vts": [{"oid": "1.2.3"}]})
+        stdout = json.dumps(
+            {"target": {"hosts": ["example"]}, "vts": [{"oid": "1.2.3"}]}
+        )
         stderr = ""
 
     def fake_run(command, input, text, capture_output, check):
