@@ -1,28 +1,20 @@
 name: scan-examples
 
 services:
-  vulnerability-tests:
-    image: registry.community.greenbone.net/community/vulnerability-tests
-    environment:
-      FEED_RELEASE: "24.10"
-      KEEP_ALIVE: 1
+  greenbone-feed-sync:
+    image: registry.community.greenbone.net/community/greenbone-feed-sync
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        greenbone-feed-sync --type nasl
+        greenbone-feed-sync --type notus
+        greenbone-feed-sync --type gvmd-data
     volumes:
-      - vt_data_vol:/mnt
-
-  notus-data:
-    image: registry.community.greenbone.net/community/notus-data
-    environment:
-      KEEP_ALIVE: 1
-    volumes:
-      - notus_data_vol:/mnt
-
-  data-objects:
-    image: registry.community.greenbone.net/community/data-objects
-    environment:
-      FEED_RELEASE: "24.10"
-      KEEP_ALIVE: 1
-    volumes:
-      - data_objects_vol:/mnt
+      - vt_data_vol:/var/lib/openvas/plugins
+      - notus_data_vol:/var/lib/notus
+      - data_objects_vol:/var/lib/gvm/data-objects/gvmd
 
   gpg-data:
     image: registry.community.greenbone.net/community/gpg-data
@@ -64,10 +56,8 @@ services:
       - vt_data_vol:/var/lib/openvas/plugins
       - ospd_openvas_socket_vol:/var/run/ospd
     depends_on:
-      vulnerability-tests:
-        condition: service_healthy
-      notus-data:
-        condition: service_healthy
+      greenbone-feed-sync:
+        condition: service_completed_successfully
       configure-openvas:
         condition: service_completed_successfully
       gpg-data:
@@ -108,10 +98,8 @@ services:
         condition: service_completed_successfully
       configure-openvas:
         condition: service_completed_successfully
-      vulnerability-tests:
-        condition: service_healthy
-      notus-data:
-        condition: service_healthy
+      greenbone-feed-sync:
+        condition: service_completed_successfully
 
   target:
     image: kirscht/metasploitable3-ub1404:latest
@@ -146,8 +134,8 @@ services:
     depends_on:
       openvasd:
         condition: service_started
-      data-objects:
-        condition: service_healthy
+      greenbone-feed-sync:
+        condition: service_completed_successfully
       target:
         condition: service_healthy
 

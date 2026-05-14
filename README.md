@@ -1,6 +1,7 @@
 # scan-examples
 
-Example code for using the OpenVAS scanner container REST API with the Greenbone community containers.
+Example code for using the OpenVAS scanner container REST API with Greenbone community scanner
+containers and feed data synchronized by `greenbone-feed-sync`.
 
 ## License
 
@@ -12,20 +13,24 @@ MIT. See `LICENSE`.
 - `scannerctl` based conversion of feed scan configs into scan JSON, plus direct custom scan JSON payloads
 - Docker image for the example CLI
 - Docker Compose environment with:
-  - Greenbone community feed containers
+  - `greenbone-feed-sync` for retrieving NASL, Notus, and data-object feeds into persistent named
+    volumes
   - `openvasd` REST API plus the required `ospd-openvas` scanner service/socket wiring
   - a `kirscht/metasploitable3-ub1404` target container for end-to-end scans
 - Unit tests and a self-hosted GitHub Actions workflow for end-to-end validation
 
 ## Configuration
 
-This example targets the **Greenbone community container** deployment shown in `docker-compose.yml`.
+This example targets the **Greenbone community scanner container** deployment shown in
+`docker-compose.yml`, with feed data retrieved by the `greenbone-feed-sync` container instead of the
+community feed data-copy containers.
 
 - Scanner API endpoint inside Compose: `http://openvasd:80`
 - Scanner API endpoint from the host: `http://localhost:3000`
-- Community feed mounts expected by the example:
-  - data objects: `/feed/data-objects`
-  - vulnerability tests: `/feed/vulnerability-tests`
+- Feed mounts expected by the example:
+  - data objects synchronized by `greenbone-feed-sync --type gvmd-data`: `/feed/data-objects`
+  - NASL vulnerability tests synchronized by `greenbone-feed-sync --type nasl`:
+    `/feed/vulnerability-tests`
 - Certificates:
   - the bundled Compose environment uses plain HTTP internally, so no client certificate files are required for the example workflow
   - if you point the CLI at an HTTPS scanner endpoint, trust the server certificate in your runtime or use `--insecure` only for throwaway lab testing
@@ -34,8 +39,9 @@ Supported environment variables:
 
 - `SCANNER_API_URL` — scanner REST API base URL
 - `SCANNER_API_TIMEOUT` — HTTP timeout in seconds
-- `DATA_OBJECTS_PATH` — mounted community `data-objects` feed path
-- `VT_PATH` — mounted community `vulnerability-tests` feed path (used for both NASL content and `vt-metadata.json` enrichment lookups)
+- `DATA_OBJECTS_PATH` — mounted Greenbone data-objects feed path
+- `VT_PATH` — mounted Greenbone vulnerability-tests feed path (used for both NASL content and
+  `vt-metadata.json` enrichment lookups)
 - `SCAP_PATH` — optional path to SCAP/NVD CVE JSON data for second-stage CVE enrichment after VT OID matching
 - `SCANNERCTL_BIN` — path to `scannerctl`
 - `SCAN_CONFIG` — scan config to convert with `scannerctl` (defaults to `full-and-fast`)
@@ -219,11 +225,17 @@ One gotcha we hit: `openvasd` does not actually run scans by itself in this comm
 
 ## Compose-based test environment
 
-Start the scanner stack and target:
+Synchronize the Greenbone feed into persistent named volumes, then start the scanner stack and target:
 
 ```bash
-docker compose up -d vulnerability-tests notus-data data-objects gpg-data redis-server configure-openvas ospd-openvas openvasd target
+docker compose up greenbone-feed-sync
+docker compose up -d gpg-data redis-server configure-openvas ospd-openvas openvasd target
 ```
+
+The `greenbone-feed-sync` service downloads NASL VTs, Notus data, and GVMD data objects
+(`scan-configs`, `port-lists`, etc.) using rsync. The named volumes (`vt_data_vol`,
+`notus_data_vol`, and `data_objects_vol`) are reused by later runs, so subsequent synchronizations
+only fetch deltas instead of starting from empty feed containers.
 
 Run the example container against that stack:
 
@@ -271,7 +283,10 @@ The repo includes `.github/workflows/tests.yml` with:
 
 That runner is intended to map to the dedicated Hetzner runner named `hetzner-vps-scan-examples`.
 
-The self-hosted e2e workflow intentionally keeps the named feed volumes (`vt_data_vol`, `notus_data_vol`, `data_objects_vol`, `gpg_data_vol`) between runs so Greenbone community feed data does not need to be re-fetched every time. Transient scanner state volumes are removed during teardown.
+The self-hosted e2e workflow runs `greenbone-feed-sync` before starting the scanner stack and
+intentionally keeps the named feed volumes (`vt_data_vol`, `notus_data_vol`, `data_objects_vol`,
+`gpg_data_vol`) between runs so Greenbone feed data is updated incrementally instead of re-fetched
+from scratch every time. Transient scanner state volumes are removed during teardown.
 
 ## Reference docs
 
