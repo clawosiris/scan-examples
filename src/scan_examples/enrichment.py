@@ -1,3 +1,5 @@
+"""Result enrichment helpers for correlating findings with local feed metadata."""
+
 from __future__ import annotations
 
 import argparse
@@ -9,6 +11,7 @@ from .feed import load_scap_cve_index, load_vt_metadata_index
 
 
 def select_vt_metadata_fields(entry: dict[str, Any]) -> dict[str, Any]:
+    """Keep the VT metadata fields that are most useful in enriched output."""
     selected: dict[str, Any] = {}
     for key in (
         "oid",
@@ -28,6 +31,7 @@ def select_vt_metadata_fields(entry: dict[str, Any]) -> dict[str, Any]:
 
 
 def extract_cve_ids_from_vt_metadata(entry: dict[str, Any] | None) -> list[str]:
+    """Extract unique CVE identifiers from a VT metadata entry."""
     if not entry:
         return []
     cve_ids: list[str] = []
@@ -48,6 +52,7 @@ def extract_cve_ids_from_vt_metadata(entry: dict[str, Any] | None) -> list[str]:
 
 
 def extract_result_oid(result: dict[str, Any]) -> str | None:
+    """Return the VT OID from either the top-level result or nested NVT data."""
     oid = result.get("oid")
     if isinstance(oid, str) and oid:
         return oid
@@ -70,6 +75,7 @@ def _enriched_result(
     cve_metadata_status: str = "no_cves",
     cve_metadata: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    """Build the normalized output object for one scanner finding."""
     return {
         **result,
         "vt-metadata-status": vt_metadata_status,
@@ -85,6 +91,7 @@ def enrich_results(
     vt_index: dict[str, dict[str, Any]] | None,
     scap_cve_index: dict[str, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
+    """Attach VT metadata and optional CVE metadata to scanner results."""
     enriched: list[dict[str, Any]] = []
     for result in results:
         oid = extract_result_oid(result)
@@ -112,6 +119,8 @@ def enrich_results(
             continue
 
         cve_ids = extract_cve_ids_from_vt_metadata(entry)
+        # VT metadata gives us the CVE ids; the optional SCAP index lets us
+        # expand those ids into richer vulnerability context for each finding.
         cve_metadata = [
             scap_cve_index[cve_id]
             for cve_id in cve_ids
@@ -142,15 +151,18 @@ def enrich_results(
 
 
 def _format_enriched_result_for_log(enriched_result: dict[str, Any]) -> dict[str, Any]:
+    """Hook for future log-specific formatting without changing callers."""
     return enriched_result
 
 
 def dump_pretty_enriched_results(enriched_results: list[dict[str, Any]]) -> str:
+    """Render enriched results as stable, human-readable JSON."""
     log_payload = [_format_enriched_result_for_log(result) for result in enriched_results]
     return json.dumps(log_payload, indent=2, sort_keys=True)
 
 
 def load_scan_results(results_path: str | Path) -> list[dict[str, Any]]:
+    """Load scanner results from disk and normalize the top-level payload shape."""
     payload = json.loads(Path(results_path).read_text(encoding="utf-8"))
     if isinstance(payload, list):
         results = payload
@@ -170,6 +182,7 @@ def enrich_results_from_files(
     vt_metadata_path: str | Path,
     scap_path: str | Path | None = None,
 ) -> list[dict[str, Any]]:
+    """Load inputs from disk and run the standard enrichment pipeline."""
     results = load_scan_results(results_path)
     _metadata_path, vt_index = load_vt_metadata_index(vt_metadata_path)
     scap_cve_index = None
@@ -179,6 +192,7 @@ def enrich_results_from_files(
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build the standalone enrichment CLI argument parser."""
     parser = argparse.ArgumentParser(
         description="Enrich OpenVAS scanner results with Greenbone feed metadata"
     )
@@ -201,6 +215,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the standalone enrichment CLI."""
     parser = build_parser()
     args = parser.parse_args(argv)
     enriched = enrich_results_from_files(

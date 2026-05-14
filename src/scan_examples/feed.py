@@ -1,3 +1,5 @@
+"""Feed-loading utilities for VT metadata and SCAP CVE data."""
+
 from __future__ import annotations
 
 import gzip
@@ -12,6 +14,7 @@ CVE_ID_PATTERN = re.compile(r"^CVE-\d{4}-\d{4,}$", re.IGNORECASE)
 
 
 def resolve_vt_metadata_path(vt_path: str | Path) -> Path:
+    """Locate ``vt-metadata.json`` from either a file path or a feed directory."""
     base = Path(vt_path)
     if base.is_file():
         return base
@@ -35,6 +38,7 @@ def resolve_vt_metadata_path(vt_path: str | Path) -> Path:
 
 
 def _normalize_vt_metadata_payload(payload: Any) -> list[dict[str, Any]]:
+    """Accept the common VT metadata JSON envelope shapes used in the wild."""
     if isinstance(payload, list):
         return [entry for entry in payload if isinstance(entry, dict)]
     if isinstance(payload, dict):
@@ -46,6 +50,7 @@ def _normalize_vt_metadata_payload(payload: Any) -> list[dict[str, Any]]:
 
 
 def load_vt_metadata_index(vt_path: str | Path) -> tuple[Path, dict[str, dict[str, Any]]]:
+    """Load VT metadata and index it by OID for fast result lookups."""
     metadata_path = resolve_vt_metadata_path(vt_path)
     payload = json.loads(metadata_path.read_text(encoding="utf-8"))
     entries = _normalize_vt_metadata_payload(payload)
@@ -58,6 +63,7 @@ def load_vt_metadata_index(vt_path: str | Path) -> tuple[Path, dict[str, dict[st
 
 
 def resolve_scap_data_paths(scap_path: str | Path) -> list[Path]:
+    """Resolve one file or a directory tree of SCAP/NVD JSON payloads."""
     base = Path(scap_path)
     if base.is_file():
         return [base]
@@ -74,6 +80,7 @@ def resolve_scap_data_paths(scap_path: str | Path) -> list[Path]:
 
 
 def _read_json_path(path: Path) -> Any:
+    """Read plain or gzip-compressed JSON files."""
     if path.suffix == ".gz":
         with gzip.open(path, "rt", encoding="utf-8") as handle:
             return json.load(handle)
@@ -82,6 +89,7 @@ def _read_json_path(path: Path) -> Any:
 
 
 def _iter_cve_entries(payload: Any):
+    """Yield raw CVE entry objects from several supported SCAP/NVD formats."""
     if isinstance(payload, dict):
         vulnerabilities = payload.get("vulnerabilities")
         if isinstance(vulnerabilities, list):
@@ -113,6 +121,7 @@ def _iter_cve_entries(payload: Any):
 
 
 def _extract_english_values(values: Any) -> list[str]:
+    """Extract English or best-effort human-readable strings from value lists."""
     if not isinstance(values, list):
         return []
     selected: list[str] = []
@@ -127,6 +136,7 @@ def _extract_english_values(values: Any) -> list[str]:
 
 
 def _extract_reference_urls(references: Any) -> list[str]:
+    """Collect unique reference URLs from CVE metadata blocks."""
     refs = references.get("referenceData") if isinstance(references, dict) else references
     if not isinstance(refs, list):
         return []
@@ -141,6 +151,7 @@ def _extract_reference_urls(references: Any) -> list[str]:
 
 
 def _extract_weaknesses(weaknesses: Any, problemtype: Any = None) -> list[str]:
+    """Collect CWE or weakness identifiers from CVE metadata."""
     ids: list[str] = []
     if isinstance(weaknesses, list):
         for weakness in weaknesses:
@@ -164,6 +175,7 @@ def _extract_weaknesses(weaknesses: Any, problemtype: Any = None) -> list[str]:
 
 
 def _extract_cvss(metrics: Any, impact: Any = None) -> dict[str, Any]:
+    """Select a compact CVSS view from either modern or legacy CVE schemas."""
     selected: dict[str, Any] = {}
     if isinstance(metrics, dict):
         for key in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
@@ -192,6 +204,7 @@ def _extract_cvss(metrics: Any, impact: Any = None) -> dict[str, Any]:
 
 
 def _extract_affected_cpes(configurations: Any) -> list[str]:
+    """Collect affected CPE identifiers from nested configuration trees."""
     cpes: list[str] = []
 
     def visit(value: Any) -> None:
@@ -211,6 +224,7 @@ def _extract_affected_cpes(configurations: Any) -> list[str]:
 
 
 def select_scap_cve_fields(entry: dict[str, Any]) -> dict[str, Any] | None:
+    """Reduce a raw CVE record to the fields the example actually uses."""
     cve_id = entry.get("id")
     if not isinstance(cve_id, str):
         meta = entry.get("cve", {}).get("CVE_data_meta") if isinstance(entry.get("cve"), dict) else entry.get("CVE_data_meta")
@@ -262,6 +276,7 @@ def select_scap_cve_fields(entry: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def load_scap_cve_index(scap_path: str | Path) -> tuple[list[Path], dict[str, dict[str, Any]]]:
+    """Load SCAP/NVD CVE data and index it by CVE id."""
     paths = resolve_scap_data_paths(scap_path)
     index: dict[str, dict[str, Any]] = {}
     for path in paths:
@@ -274,18 +289,21 @@ def load_scap_cve_index(scap_path: str | Path) -> tuple[list[Path], dict[str, di
 
 
 def select_vt_metadata_fields(entry: dict[str, Any]) -> dict[str, Any]:
+    """Compatibility wrapper re-exported from :mod:`scan_examples.enrichment`."""
     from .enrichment import select_vt_metadata_fields as _select_vt_metadata_fields
 
     return _select_vt_metadata_fields(entry)
 
 
 def extract_cve_ids_from_vt_metadata(entry: dict[str, Any] | None) -> list[str]:
+    """Compatibility wrapper re-exported from :mod:`scan_examples.enrichment`."""
     from .enrichment import extract_cve_ids_from_vt_metadata as _extract_cve_ids
 
     return _extract_cve_ids(entry)
 
 
 def extract_result_oid(result: dict[str, Any]) -> str | None:
+    """Compatibility wrapper re-exported from :mod:`scan_examples.enrichment`."""
     from .enrichment import extract_result_oid as _extract_result_oid
 
     return _extract_result_oid(result)
@@ -296,12 +314,14 @@ def enrich_results(
     vt_index: dict[str, dict[str, Any]] | None,
     scap_cve_index: dict[str, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
+    """Compatibility wrapper re-exported from :mod:`scan_examples.enrichment`."""
     from .enrichment import enrich_results as _enrich_results
 
     return _enrich_results(results, vt_index, scap_cve_index)
 
 
 def dump_pretty_enriched_results(enriched_results: list[dict[str, Any]]) -> str:
+    """Compatibility wrapper re-exported from :mod:`scan_examples.enrichment`."""
     from .enrichment import dump_pretty_enriched_results as _dump_pretty
 
     return _dump_pretty(enriched_results)

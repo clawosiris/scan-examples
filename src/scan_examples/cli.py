@@ -1,3 +1,5 @@
+"""Command-line entry points for the scan examples package."""
+
 from __future__ import annotations
 
 import argparse
@@ -21,6 +23,7 @@ DEFAULT_TARGET_SSH_PORT = 22
 
 
 def _non_negative_float(raw: str) -> float:
+    """``argparse`` converter that rejects negative float values."""
     value = float(raw)
     if value < 0:
         raise argparse.ArgumentTypeError("must be >= 0")
@@ -28,6 +31,7 @@ def _non_negative_float(raw: str) -> float:
 
 
 def _positive_int(raw: str) -> int:
+    """``argparse`` converter that rejects values smaller than one."""
     value = int(raw)
     if value < 1:
         raise argparse.ArgumentTypeError("must be >= 1")
@@ -35,6 +39,7 @@ def _positive_int(raw: str) -> int:
 
 
 def _build_client(args: argparse.Namespace) -> OpenVASScannerClient:
+    """Construct the API client from shared CLI flags."""
     return OpenVASScannerClient(
         base_url=args.base_url,
         timeout=args.timeout,
@@ -43,6 +48,7 @@ def _build_client(args: argparse.Namespace) -> OpenVASScannerClient:
 
 
 def _dump_json(payload: Any, output: str | None) -> None:
+    """Write JSON either to stdout or to a requested file path."""
     rendered = json.dumps(payload, indent=2, sort_keys=True)
     if output:
         Path(output).write_text(rendered + "\n", encoding="utf-8")
@@ -51,12 +57,14 @@ def _dump_json(payload: Any, output: str | None) -> None:
 
 
 def _parse_ports(raw: str | None) -> list[int]:
+    """Parse a comma-separated list of TCP ports from CLI input."""
     if not raw:
         return []
     return [int(part.strip()) for part in raw.split(",") if part.strip()]
 
 
 def _load_scap_index_for_cli(scap_path: str | None, progress: Callable[[str], None] | None = None) -> dict[str, dict[str, Any]] | None:
+    """Load SCAP CVE data, but degrade gracefully when it is unavailable."""
     if not scap_path:
         return None
     try:
@@ -76,6 +84,7 @@ def _load_scap_index_for_cli(scap_path: str | None, progress: Callable[[str], No
 
 
 def _load_vt_index_for_cli(vt_path: str, progress: Callable[[str], None] | None = None) -> dict[str, dict[str, Any]] | None:
+    """Load VT metadata, but keep the CLI usable even when enrichment is missing."""
     try:
         metadata_path, vt_index = load_vt_metadata_index(vt_path)
     except FileNotFoundError:
@@ -104,6 +113,7 @@ def _convert_with_fallback(
     scannerctl_bin: str,
     progress: Callable[[str], None] | None = None,
 ):
+    """Convert a scan config and fall back to bundled lab ports when needed."""
     try:
         return convert_scan_config(
             layout=layout,
@@ -137,6 +147,7 @@ def _convert_with_fallback(
 
 
 def cmd_convert(args: argparse.Namespace) -> int:
+    """Convert a scan config into the JSON payload expected by the scanner API."""
     tcp_ports = _parse_ports(args.tcp_ports)
     if args.scan_config_json:
         payload = load_custom_scan_config(
@@ -164,6 +175,7 @@ def cmd_convert(args: argparse.Namespace) -> int:
 
 
 def cmd_create(args: argparse.Namespace) -> int:
+    """Create a scan from a JSON payload file."""
     client = _build_client(args)
     payload = json.loads(Path(args.scan_json).read_text(encoding="utf-8"))
     scan_id = client.create_scan(payload)
@@ -172,18 +184,21 @@ def cmd_create(args: argparse.Namespace) -> int:
 
 
 def cmd_start(args: argparse.Namespace) -> int:
+    """Start an existing scan."""
     client = _build_client(args)
     _dump_json(client.start_scan(args.scan_id), args.output)
     return 0
 
 
 def cmd_stop(args: argparse.Namespace) -> int:
+    """Stop a running scan."""
     client = _build_client(args)
     _dump_json(client.stop_scan(args.scan_id), args.output)
     return 0
 
 
 def cmd_results(args: argparse.Namespace) -> int:
+    """Fetch scan results and, when possible, enrich them with feed metadata."""
     client = _build_client(args)
     results = client.get_results(args.scan_id)
     vt_index = _load_vt_index_for_cli(args.vt_path)
@@ -200,6 +215,7 @@ def cmd_results(args: argparse.Namespace) -> int:
 
 
 def cmd_delete(args: argparse.Namespace) -> int:
+    """Delete a scan."""
     client = _build_client(args)
     response = client.delete_scan(args.scan_id)
     _dump_json({"scan_id": args.scan_id, "deleted": True, "response": response}, args.output)
@@ -207,6 +223,8 @@ def cmd_delete(args: argparse.Namespace) -> int:
 
 
 def cmd_e2e(args: argparse.Namespace) -> int:
+    """Run the full example lifecycle and print human-friendly progress."""
+
     def progress(message: str) -> None:
         print(f"[e2e] {message}", file=sys.stderr, flush=True)
 
@@ -277,10 +295,12 @@ def cmd_e2e(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build the top-level CLI parser and all subcommands."""
     parser = argparse.ArgumentParser(description="OpenVAS Scanner REST API example")
     parser.set_defaults(func=None)
 
     def add_shared_api_flags(command: argparse.ArgumentParser) -> None:
+        """Register flags shared by commands that call the scanner API directly."""
         command.add_argument(
             "--base-url",
             default=os.environ.get("SCANNER_API_URL", "http://openvasd:80"),
@@ -300,6 +320,7 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument("--output", help="Write JSON output to a file")
 
     def add_vt_path_flag(command: argparse.ArgumentParser) -> None:
+        """Register the VT feed path flag used for metadata enrichment."""
         command.add_argument(
             "--vt-path",
             default=os.environ.get("VT_PATH", "/feed/vulnerability-tests"),
@@ -307,6 +328,7 @@ def build_parser() -> argparse.ArgumentParser:
         )
 
     def add_scap_path_flag(command: argparse.ArgumentParser) -> None:
+        """Register the optional SCAP data path flag."""
         command.add_argument(
             "--scap-path",
             default=os.environ.get("SCAP_PATH"),
@@ -314,6 +336,7 @@ def build_parser() -> argparse.ArgumentParser:
         )
 
     def add_scan_config_flag(command: argparse.ArgumentParser) -> None:
+        """Register the scan-config selector flag."""
         command.add_argument(
             "--scan-config",
             default=os.environ.get("SCAN_CONFIG", "full-and-fast"),
@@ -321,6 +344,7 @@ def build_parser() -> argparse.ArgumentParser:
         )
 
     def add_shared_feed_flags(command: argparse.ArgumentParser, *, include_output: bool = True) -> None:
+        """Register flags shared by feed-backed conversion and e2e commands."""
         command.add_argument(
             "--data-objects-path",
             default=os.environ.get("DATA_OBJECTS_PATH", "/feed/data-objects"),
@@ -459,6 +483,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the main example CLI."""
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.func is None:

@@ -1,3 +1,5 @@
+"""Helpers for turning feed data and scanner configs into scan payloads."""
+
 from __future__ import annotations
 
 import json
@@ -27,11 +29,14 @@ class ScanConfigConversionError(RuntimeError):
 
 @dataclass(slots=True)
 class FeedLayout:
+    """Resolved feed directories needed for config conversion."""
+
     data_objects_path: Path
     vt_path: Path
 
 
 def _first_existing(root: Path, candidates: list[str]) -> Path:
+    """Return the first matching file under ``root`` from a candidate list."""
     for candidate in candidates:
         matches = list(root.rglob(candidate))
         if matches:
@@ -40,6 +45,11 @@ def _first_existing(root: Path, candidates: list[str]) -> Path:
 
 
 def _resolve_vt_path(root: Path) -> Path:
+    """Resolve the actual VT feed directory from a broad mount path.
+
+    Compose mounts may point at the VT directory itself or at a parent
+    directory that contains it, so we search for the usual marker files.
+    """
     if (root / "sha256sums").exists() or (root / "vt-metadata.json").exists():
         return root
     for marker in ("sha256sums", "vt-metadata.json"):
@@ -50,6 +60,7 @@ def _resolve_vt_path(root: Path) -> Path:
 
 
 def discover_feed_layout(data_objects_path: str | os.PathLike[str], vt_path: str | os.PathLike[str]) -> FeedLayout:
+    """Build a :class:`FeedLayout` from the configured feed paths."""
     return FeedLayout(data_objects_path=Path(data_objects_path), vt_path=_resolve_vt_path(Path(vt_path)))
 
 
@@ -61,6 +72,11 @@ def build_target_payload(
     ssh_password: str | None = None,
     ssh_port: int = 22,
 ) -> dict[str, Any]:
+    """Build the target portion of a scanner payload.
+
+    This is the minimal structure needed by ``scannerctl`` and the direct JSON
+    payload path used by the examples.
+    """
     target: dict[str, Any] = {"hosts": hosts}
     if tcp_ports:
         target["ports"] = _build_tcp_port_ranges(tcp_ports)
@@ -76,6 +92,7 @@ def build_target_payload(
 
 
 def _build_tcp_port_ranges(tcp_ports: list[int]) -> list[dict[str, Any]]:
+    """Translate a flat port list into the scanner API range structure."""
     return [{"protocol": "tcp", "range": [{"start": int(port)} for port in tcp_ports]}]
 
 
@@ -88,6 +105,7 @@ def _apply_target_overrides(
     ssh_password: str | None = None,
     ssh_port: int = 22,
 ) -> dict[str, Any]:
+    """Apply host, port, and credential overrides to a custom payload template."""
     updated = json.loads(json.dumps(payload))
     target = updated.setdefault("target", {})
     if not isinstance(target, dict):
@@ -115,6 +133,11 @@ def load_custom_scan_config(
     ssh_password: str | None = None,
     ssh_port: int = 22,
 ) -> dict[str, Any]:
+    """Load a custom scan payload from JSON or a zip archive.
+
+    The zip support is mainly for exported scanner payloads that bundle exactly
+    one JSON file.
+    """
     scan_config_path = Path(path)
     if scan_config_path.suffix == ".zip":
         with zipfile.ZipFile(scan_config_path) as archive:
@@ -149,6 +172,7 @@ def load_custom_scan_config(
 
 
 def _write_portlist_xml(tcp_ports: list[int]) -> Path:
+    """Create a temporary scannerctl-compatible XML port list file."""
     ranges = "\n".join(
         f'''    <port_range id="generated-{index}">\n      <start>{int(port)}</start>\n      <end>{int(port)}</end>\n      <type>tcp</type>\n      <comment/>\n    </port_range>'''
         for index, port in enumerate(tcp_ports, start=1)
@@ -160,6 +184,7 @@ def _write_portlist_xml(tcp_ports: list[int]) -> Path:
 
 
 def _resolve_scan_config_path(layout: FeedLayout, scan_config: str) -> Path:
+    """Resolve a scan config alias, file name, or explicit path."""
     alias_candidates = SCAN_CONFIG_ALIASES.get(scan_config)
     if alias_candidates is not None:
         return _first_existing(layout.data_objects_path, alias_candidates)
@@ -186,6 +211,7 @@ def _build_scannerctl_commands(
     portlist: Path | None,
     scan_config: Path,
 ) -> list[list[str]]:
+    """Build modern and legacy ``scannerctl scan-config`` command variants."""
     modern = [scannerctl_bin, "scan-config", "-i", "-p", str(vt_path)]
     if portlist is not None:
         modern.extend(["-l", str(portlist)])
@@ -199,6 +225,7 @@ def _build_scannerctl_commands(
 
 
 def _is_legacy_scannerctl_syntax_error(stderr: str) -> bool:
+    """Return ``True`` when scannerctl rejected the modern CLI syntax."""
     return "unexpected argument '-i'" in stderr or "unexpected argument '-p'" in stderr
 
 
@@ -213,6 +240,11 @@ def convert_scan_config(
     ssh_port: int = 22,
     scannerctl_bin: str = "scannerctl",
 ) -> dict[str, Any]:
+    """Convert a feed-backed scan configuration into scanner API JSON.
+
+    The implementation first tries the modern ``scannerctl`` flag layout and
+    falls back to an older syntax for compatibility with older tool builds.
+    """
     scan_config_path = _resolve_scan_config_path(layout, scan_config)
     generated_portlist: Path | None = None
     if tcp_ports:
@@ -235,6 +267,8 @@ def convert_scan_config(
             portlist=portlist,
             scan_config=scan_config_path,
         )
+        # Feed the target JSON via stdin so scannerctl can merge it with the
+        # scan config definition from the Greenbone feed data.
         result = subprocess.run(
             commands[0],
             input=json.dumps(base_payload),
@@ -243,6 +277,9 @@ def convert_scan_config(
             check=False,
         )
         if result.returncode != 0 and _is_legacy_scannerctl_syntax_error(result.stderr):
+            # Older scannerctl releases use a different argument layout. Try
+            # that variant before giving up so the example is friendlier across
+            # container versions.
             result = subprocess.run(
                 commands[1],
                 input=json.dumps(base_payload),
@@ -277,6 +314,7 @@ def convert_full_and_fast(
     ssh_port: int = 22,
     scannerctl_bin: str = "scannerctl",
 ) -> dict[str, Any]:
+    """Convenience wrapper for the repo's default ``full-and-fast`` profile."""
     return convert_scan_config(
         layout=layout,
         hosts=hosts,
