@@ -7,7 +7,8 @@
     },
     "ghcr.io/devcontainers/features/rust:1": {
       "version": "stable",
-      "profile": "minimal"
+      "profile": "default",
+      "components": "clippy,rustfmt"
     },
     "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
   },
@@ -18,7 +19,7 @@
       "extensions": [
         "ms-python.python",
         "ms-python.vscode-pylance",
-        "charliermarsh.ruff",
+        "astral-sh.ruff",
         "rust-lang.rust-analyzer",
         "tamasfe.even-better-toml",
         "ms-azuretools.vscode-docker"

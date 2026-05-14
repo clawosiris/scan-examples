@@ -22,7 +22,6 @@ jobs:
         with:
           workspaces: |
             . -> target
-            rust/scan-enrichment -> target
 
       - name: Sync package + test deps
         run: uv sync --locked --extra dev
@@ -31,7 +30,7 @@ jobs:
         run: uv run pytest
 
       - name: Build Rust release binary
-        run: cargo build --release -p scan-enrichment
+        run: cargo build --locked --release -p scan-enrichment
 
       - name: Package nightly binary artifact
         run: |
