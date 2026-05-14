@@ -35,10 +35,19 @@ jobs:
         with:
           python-version: '3.11'
           enable-cache: true
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
       - name: Sync package + test deps
         run: uv sync --locked --extra dev
       - name: Run unit tests
         run: uv run pytest
+      - name: Check Rust formatting
+        run: cargo fmt --check
+      - name: Build Rust enrichment package
+        run: cargo build --locked -p scan-enrichment
 
   e2e:
     needs: unit
