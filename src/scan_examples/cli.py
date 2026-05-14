@@ -13,7 +13,7 @@ from .client import OpenVASScannerClient
 from .conversion import convert_scan_config, discover_feed_layout, load_custom_scan_config
 from .e2e import dump_result, run_lifecycle
 from .enrichment import dump_pretty_enriched_results, enrich_results
-from .feed import load_scap_cve_index, load_vt_metadata_index
+from .feed import load_notus_advisory_index, load_scap_cve_index, load_vt_metadata_index
 
 
 E2E_FALLBACK_TCP_PORTS = [21, 22, 80, 139, 445, 3306]
@@ -99,6 +99,26 @@ def _load_vt_index_for_cli(vt_path: str, progress: Callable[[str], None] | None 
     if progress is not None:
         progress(f"Loaded VT metadata index from {metadata_path}")
     return vt_index
+
+
+def _load_notus_index_for_cli(notus_path: str | None, progress: Callable[[str], None] | None = None) -> dict[str, list[dict[str, Any]]] | None:
+    """Load Notus advisory data, but degrade gracefully when it is unavailable."""
+    if not notus_path:
+        return None
+    try:
+        paths, notus_index = load_notus_advisory_index(notus_path)
+    except FileNotFoundError:
+        if progress is not None:
+            progress(f"Notus advisory data not found under {notus_path}; continuing without Notus enrichment")
+        return None
+    except (json.JSONDecodeError, ValueError, OSError) as exc:
+        if progress is not None:
+            progress(f"Failed to load Notus advisory data from {notus_path}: {exc}; continuing without Notus enrichment")
+        return None
+
+    if progress is not None:
+        progress(f"Loaded {len(notus_index)} Notus advisory OIDs from {len(paths)} file(s)")
+    return notus_index
 
 
 def _convert_with_fallback(
@@ -202,12 +222,13 @@ def cmd_results(args: argparse.Namespace) -> int:
     client = _build_client(args)
     results = client.get_results(args.scan_id)
     vt_index = _load_vt_index_for_cli(args.vt_path)
+    notus_index = _load_notus_index_for_cli(args.notus_path)
     scap_cve_index = _load_scap_index_for_cli(args.scap_path)
     _dump_json(
         {
             "scan_id": args.scan_id,
             "results": results,
-            "enriched_results": enrich_results(results, vt_index, scap_cve_index),
+            "enriched_results": enrich_results(results, vt_index, scap_cve_index, notus_index),
         },
         args.output,
     )
@@ -243,6 +264,7 @@ def cmd_e2e(args: argparse.Namespace) -> int:
     progress("Discovering Greenbone community feed layout")
     layout = discover_feed_layout(args.data_objects_path, args.vt_path)
     vt_index = _load_vt_index_for_cli(layout.vt_path, progress=progress)
+    notus_index = _load_notus_index_for_cli(args.notus_path, progress=progress)
     scap_cve_index = _load_scap_index_for_cli(args.scap_path, progress=progress)
     if args.scan_config_json:
         progress("Loading custom scan configuration JSON")
@@ -280,6 +302,7 @@ def cmd_e2e(args: argparse.Namespace) -> int:
         completion_mode=args.completion_mode,
         min_results=args.min_results,
         vt_index=vt_index,
+        notus_index=notus_index,
         scap_cve_index=scap_cve_index,
         progress=progress,
     )
@@ -333,6 +356,14 @@ def build_parser() -> argparse.ArgumentParser:
             "--scap-path",
             default=os.environ.get("SCAP_PATH"),
             help="Optional path to Greenbone/NVD SCAP CVE JSON data for CVE enrichment",
+        )
+
+    def add_notus_path_flag(command: argparse.ArgumentParser) -> None:
+        """Register the optional Notus advisory feed path flag."""
+        command.add_argument(
+            "--notus-path",
+            default=os.environ.get("NOTUS_PATH"),
+            help="Optional path to a Notus advisory file or directory containing .notus files",
         )
 
     def add_scan_config_flag(command: argparse.ArgumentParser) -> None:
@@ -417,6 +448,7 @@ def build_parser() -> argparse.ArgumentParser:
     results = subparsers.add_parser("get-results", help="Fetch scan results")
     add_shared_api_flags(results)
     add_vt_path_flag(results)
+    add_notus_path_flag(results)
     add_scap_path_flag(results)
     results.add_argument("scan_id")
     results.set_defaults(func=cmd_results)
@@ -429,6 +461,7 @@ def build_parser() -> argparse.ArgumentParser:
     e2e = subparsers.add_parser("e2e", help="Run the full create/start/stop/results/delete lifecycle")
     add_shared_api_flags(e2e)
     add_shared_feed_flags(e2e, include_output=False)
+    add_notus_path_flag(e2e)
     e2e.add_argument(
         "--wait-before-results",
         type=_non_negative_float,

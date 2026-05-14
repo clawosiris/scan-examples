@@ -152,6 +152,7 @@ def run_lifecycle(
     completion_mode: str = "first-results",
     min_results: int = 1,
     vt_index: dict[str, dict[str, Any]] | None = None,
+    notus_index: dict[str, list[dict[str, Any]]] | None = None,
     scap_cve_index: dict[str, dict[str, Any]] | None = None,
     progress: ProgressCallback | None = None,
 ) -> E2EResult:
@@ -283,7 +284,7 @@ def run_lifecycle(
             raise RuntimeError(f"Scan {scan_id} completed without findings")
 
         findings_summary = summarize_results(results)
-        enriched_results = enrich_results(results, vt_index, scap_cve_index)
+        enriched_results = enrich_results(results, vt_index, scap_cve_index, notus_index)
 
         if completion_mode == "first-results":
             _emit(progress, f"Stopping scan {scan_id}")

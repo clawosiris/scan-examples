@@ -31,6 +31,8 @@ community feed data-copy containers.
   - data objects synchronized by `greenbone-feed-sync --type gvmd-data`: `/feed/data-objects`
   - NASL vulnerability tests synchronized by `greenbone-feed-sync --type nasl`:
     `/feed/vulnerability-tests`
+  - Notus advisories synchronized by `greenbone-feed-sync --type notus`:
+    `/var/lib/notus/advisories`
 - Certificates:
   - the bundled Compose environment uses plain HTTP internally, so no client certificate files are required for the example workflow
   - if you point the CLI at an HTTPS scanner endpoint, trust the server certificate in your runtime or use `--insecure` only for throwaway lab testing
@@ -40,8 +42,10 @@ Supported environment variables:
 - `SCANNER_API_URL` — scanner REST API base URL
 - `SCANNER_API_TIMEOUT` — HTTP timeout in seconds
 - `DATA_OBJECTS_PATH` — mounted Greenbone data-objects feed path
-- `VT_PATH` — mounted Greenbone vulnerability-tests feed path (used for both NASL content and
+- `VT_PATH` — mounted Greenbone vulnerability-tests feed path (used for NASL content and
   `vt-metadata.json` enrichment lookups)
+- `NOTUS_PATH` — optional path to the mounted Notus advisory feed (`.notus` files) used for
+  Notus-specific result enrichment
 - `SCAP_PATH` — optional path to SCAP/NVD CVE JSON data for second-stage CVE enrichment after VT OID matching
 - `SCANNERCTL_BIN` — path to `scannerctl`
 - `SCAN_CONFIG` — scan config to convert with `scannerctl` (defaults to `full-and-fast`)
@@ -88,7 +92,9 @@ saved scanner output.
 Required inputs:
 - `--results` — scanner results JSON, either a raw result array or an object containing a `results`
   array
-- `--vt-metadata` — path to `vt-metadata.json` or a directory containing it
+- at least one feed metadata source:
+  - `--vt-metadata` — path to `vt-metadata.json` or a directory containing it
+  - `--notus-path` — path to a Notus advisory file or directory containing `.notus` files
 
 Optional inputs:
 - `--scap-path` — Greenbone/NVD SCAP CVE JSON data for second-stage CVE enrichment
@@ -98,6 +104,7 @@ Optional inputs:
 openvas-enrich-results \
   --results scan-results.json \
   --vt-metadata /feed/vulnerability-tests/vt-metadata.json \
+  --notus-path /var/lib/notus/advisories \
   --scap-path /feed/scap-data \
   --output enriched-results.json
 ```
@@ -111,6 +118,7 @@ from scan_examples.enrichment import enrich_results_from_files
 enriched = enrich_results_from_files(
     results_path="scan-results.json",
     vt_metadata_path="/feed/vulnerability-tests/vt-metadata.json",
+    notus_path="/var/lib/notus/advisories",
     scap_path="/feed/scap-data",
 )
 ```
@@ -127,7 +135,7 @@ This command:
 3. Starts the scan
 4. Polls according to the configured completion mode: quick checks stop after first findings; full checks wait for the scan status to reach `succeeded`
 5. Fetches results in JSON format
-6. Enriches each result with matching VT metadata from `vt-metadata.json` when available
+6. Enriches each result with matching NASL VT metadata from `vt-metadata.json` and/or matching Notus advisory metadata from `.notus` files when available
 7. Stops the scan after first findings in quick mode, or lets it finish naturally in full mode
 8. Deletes the scan
 
@@ -137,8 +145,9 @@ the final scan status, raw `results`, `enriched_results`, and a `findings_summar
 block with grouped counts by severity and type.
 
 Each `enriched_results` entry keeps the original scanner result fields at the top
-level and adds enrichment fields such as `vt-metadata`, `vt-metadata-status`,
-`cve-ids`, `cve-metadata`, and `cve-metadata-status`.
+level and adds enrichment fields such as `feed-metadata-source`, `vt-metadata`,
+`vt-metadata-status`, `notus-metadata`, `notus-metadata-status`, `cve-ids`,
+`cve-metadata`, and `cve-metadata-status`.
 
 Example raw result entry:
 
@@ -246,11 +255,17 @@ When `full_scan` is `true`, the workflow forces `scan-complete` mode and sets th
 idle timeout to `0`, so the scan waits until OpenVAS reports natural completion. The workflow
 uploads `scan-results.json` and `docker-compose.log` as the `scan-examples-e2e-artifacts` artifact.
 
-The enrichment step first uses `vt-metadata.json` from the mounted vulnerability-test feed.
+The enrichment step first uses `vt-metadata.json` from the mounted NASL vulnerability-test feed.
 The code checks both `<VT_PATH>/vt-metadata.json` and `<VT_PATH>/nasl/vt-metadata.json`.
 If the file is unavailable, malformed, or shaped unexpectedly, the workflow still returns raw
 results and marks VT enrichment as unavailable on each enriched result entry instead of
 faceplanting.
+
+For Notus-backed results, the example can also index the mounted `.notus` files from
+`<NOTUS_PATH>` (for example `/var/lib/notus/advisories`). In practice, the Notus feed can expose
+both sparse product/package mappings and richer advisory records for the same OID. The enrichment
+logic prefers the richer advisory-style data when present and merges in complementary package/fixed-
+version details from the product-style records.
 
 If `--scap-path` / `SCAP_PATH` points at SCAP/NVD CVE JSON data, enrichment then uses
 CVE references found in the matched VT metadata to attach CVE details such as descriptions,

@@ -68,8 +68,11 @@ def test_dump_result_is_machine_readable():
             {
                 "id": 1,
                 "type": "alarm",
+                "feed-metadata-source": None,
                 "vt-metadata-status": "missing_oid",
                 "vt-metadata": None,
+                "notus-metadata-status": "missing_oid",
+                "notus-metadata": [],
             }
         ],
         findings_summary={"total": 1, "by_severity": {"unknown": 1}, "by_type": {"alarm": 1}},
@@ -131,8 +134,11 @@ def test_run_lifecycle_emits_progress_in_order(monkeypatch):
     assert result.stop_response == {"status": "stopped"}
     assert result.final_status == {"status": "running"}
     assert result.delete_response == {"status": "deleted"}
+    assert result.enriched_results[0]["feed-metadata-source"] == "vt"
     assert result.enriched_results[0]["vt-metadata-status"] == "matched"
+    assert result.enriched_results[0]["notus-metadata-status"] == "metadata_unavailable"
     assert result.enriched_results[1]["vt-metadata-status"] == "missing_oid"
+    assert result.enriched_results[1]["notus-metadata-status"] == "missing_oid"
     assert sleeps == [5]
     assert messages == [
         "Creating scan (attempt 1/12)",

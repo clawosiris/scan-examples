@@ -1,4 +1,4 @@
-"""Feed-loading utilities for VT metadata and SCAP CVE data."""
+"""Feed-loading utilities for VT metadata, Notus advisories, and SCAP CVE data."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 VT_METADATA_FILENAME = "vt-metadata.json"
+NOTUS_FILE_GLOB = "*.notus"
 SCAP_JSON_GLOBS = ("*.json", "*.json.gz")
 CVE_ID_PATTERN = re.compile(r"^CVE-\d{4}-\d{4,}$", re.IGNORECASE)
 
@@ -37,6 +38,23 @@ def resolve_vt_metadata_path(vt_path: str | Path) -> Path:
     raise FileNotFoundError(f"Could not find {VT_METADATA_FILENAME} under {base}")
 
 
+def resolve_notus_advisory_paths(notus_path: str | Path) -> list[Path]:
+    """Resolve one advisory file or a directory tree of ``.notus`` files."""
+    base = Path(notus_path)
+    if base.is_file():
+        return [base]
+    if not base.exists():
+        raise FileNotFoundError(f"Could not find Notus advisories under {base}")
+
+    matches = sorted(
+        (path for path in base.rglob(NOTUS_FILE_GLOB) if path.is_file()),
+        key=lambda path: (len(path.parts), str(path)),
+    )
+    if not matches:
+        raise FileNotFoundError(f"Could not find Notus advisory files under {base}")
+    return matches
+
+
 def _normalize_vt_metadata_payload(payload: Any) -> list[dict[str, Any]]:
     """Accept the common VT metadata JSON envelope shapes used in the wild."""
     if isinstance(payload, list):
@@ -60,6 +78,152 @@ def load_vt_metadata_index(vt_path: str | Path) -> tuple[Path, dict[str, dict[st
         if isinstance(oid, str) and oid:
             index[oid] = entry
     return metadata_path, index
+
+
+def _notus_source_type(advisory_file: Path) -> str:
+    """Classify a Notus file by its feed subdirectory role."""
+    parts = advisory_file.parts
+    if "advisories" in parts:
+        return "advisory"
+    if "products" in parts:
+        return "product"
+    return "generic"
+
+
+def select_notus_advisory_fields(
+    advisory: dict[str, Any],
+    *,
+    product_name: str | None,
+    package_type: str | None,
+    advisory_file: Path,
+) -> dict[str, Any]:
+    """Reduce a raw Notus advisory entry to the fields useful for enrichment."""
+    selected: dict[str, Any] = {
+        "oid": advisory.get("oid"),
+        "advisory_file": advisory_file.name,
+        "notus_source_type": _notus_source_type(advisory_file),
+        "source_files": [advisory_file.name],
+    }
+    if product_name:
+        selected["product_name"] = product_name
+    if package_type:
+        selected["package_type"] = package_type
+    for key in (
+        "title",
+        "creation_date",
+        "last_modification",
+        "advisory_id",
+        "advisory_xref",
+        "summary",
+        "insight",
+        "affected",
+        "qod_type",
+        "severity",
+    ):
+        if key in advisory:
+            selected[key] = advisory[key]
+
+    cves = advisory.get("cves")
+    if isinstance(cves, list):
+        selected["cves"] = [cve for cve in cves if isinstance(cve, str)]
+
+    xrefs = advisory.get("xrefs")
+    if isinstance(xrefs, list):
+        selected["xrefs"] = xrefs
+
+    fixed_packages = advisory.get("fixed_packages")
+    if isinstance(fixed_packages, list):
+        selected["fixed_packages"] = [
+            package for package in fixed_packages if isinstance(package, dict)
+        ]
+    return selected
+
+
+def _json_dedup_key(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def _merge_notus_entries(entries: list[dict[str, Any]]) -> dict[str, Any]:
+    """Merge sparse product records with richer advisory records for one OID."""
+    if not entries:
+        raise ValueError("Cannot merge empty Notus entry set")
+
+    def score(entry: dict[str, Any]) -> tuple[int, int]:
+        rich_fields = sum(
+            1
+            for key in ("title", "advisory_id", "advisory_xref", "cves", "summary", "insight", "severity")
+            if entry.get(key)
+        )
+        source_bonus = 1 if entry.get("notus_source_type") == "advisory" else 0
+        return (rich_fields, source_bonus)
+
+    merged: dict[str, Any] = {}
+    for entry in sorted(entries, key=score, reverse=True):
+        for key, value in entry.items():
+            if value in (None, [], {}, ""):
+                continue
+            if key in ("source_files",):
+                merged.setdefault(key, [])
+                for item in value:
+                    if item not in merged[key]:
+                        merged[key].append(item)
+            elif key in ("cves", "xrefs", "fixed_packages"):
+                merged.setdefault(key, [])
+                seen = {_json_dedup_key(item) for item in merged[key]}
+                for item in value:
+                    item_key = _json_dedup_key(item)
+                    if item_key not in seen:
+                        merged[key].append(item)
+                        seen.add(item_key)
+            elif key not in merged:
+                merged[key] = value
+    return merged
+
+
+def load_notus_advisory_index(notus_path: str | Path) -> tuple[list[Path], dict[str, list[dict[str, Any]]]]:
+    """Load Notus advisory files and index them by advisory OID.
+
+    A single OID may appear in more than one OS advisory file, so the index maps
+    each OID to a list of matching advisory snippets instead of a single object.
+    """
+    paths = resolve_notus_advisory_paths(notus_path)
+    index: dict[str, list[dict[str, Any]]] = {}
+    for path in paths:
+        payload = _read_json_path(path)
+        if not isinstance(payload, dict):
+            raise ValueError(f"Unsupported Notus advisory payload shape in {path}")
+
+        product_name = payload.get("product_name")
+        if not isinstance(product_name, str):
+            product_name = None
+        package_type = payload.get("package_type")
+        if not isinstance(package_type, str):
+            package_type = None
+
+        advisories = payload.get("advisories")
+        if not isinstance(advisories, list):
+            continue
+
+        for advisory in advisories:
+            if not isinstance(advisory, dict):
+                continue
+            oid = advisory.get("oid")
+            if not isinstance(oid, str) or not oid:
+                continue
+            index.setdefault(oid, []).append(
+                select_notus_advisory_fields(
+                    advisory,
+                    product_name=product_name,
+                    package_type=package_type,
+                    advisory_file=path,
+                )
+            )
+
+    merged_index: dict[str, list[dict[str, Any]]] = {}
+    for oid, advisories in index.items():
+        merged_index[oid] = [_merge_notus_entries(advisories)]
+
+    return paths, merged_index
 
 
 def resolve_scap_data_paths(scap_path: str | Path) -> list[Path]:
@@ -313,11 +477,12 @@ def enrich_results(
     results: list[dict[str, Any]],
     vt_index: dict[str, dict[str, Any]] | None,
     scap_cve_index: dict[str, dict[str, Any]] | None = None,
+    notus_index: dict[str, list[dict[str, Any]]] | None = None,
 ) -> list[dict[str, Any]]:
     """Compatibility wrapper re-exported from :mod:`scan_examples.enrichment`."""
     from .enrichment import enrich_results as _enrich_results
 
-    return _enrich_results(results, vt_index, scap_cve_index)
+    return _enrich_results(results, vt_index, scap_cve_index, notus_index)
 
 
 def dump_pretty_enriched_results(enriched_results: list[dict[str, Any]]) -> str:
