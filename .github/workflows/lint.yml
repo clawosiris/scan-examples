@@ -10,9 +10,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: greenbone/actions/lint-python@main
+      - uses: astral-sh/setup-uv@v5
         with:
           python-version: '3.11'
-          install-args: --group dev
-          ruff-check-args: .
-          ruff-format-args: --check .
+          enable-cache: true
+      - name: Sync lint dependencies
+        run: uv sync --locked --extra dev
+      - name: Run Ruff checks
+        run: uv run ruff check .
+      - name: Check Ruff formatting
+        run: uv run ruff format --check .
