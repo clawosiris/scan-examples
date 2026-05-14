@@ -66,6 +66,21 @@ def extract_result_oid(result: dict[str, Any]) -> str | None:
     return None
 
 
+def extract_cve_ids_from_notus_metadata(entries: list[dict[str, Any]] | None) -> list[str]:
+    """Extract unique CVE identifiers from one or more Notus metadata entries."""
+    if not entries:
+        return []
+    cve_ids: list[str] = []
+    for entry in entries:
+        cves = entry.get("cves")
+        if not isinstance(cves, list):
+            continue
+        for cve in cves:
+            if isinstance(cve, str) and cve.upper().startswith("CVE-"):
+                cve_ids.append(cve.upper())
+    return sorted(set(cve_ids))
+
+
 def _feed_metadata_source(vt_metadata: dict[str, Any] | None, notus_metadata: list[dict[str, Any]]) -> str | None:
     """Describe which enrichment source(s) matched for a result."""
     if vt_metadata and notus_metadata:
@@ -142,21 +157,12 @@ def enrich_results(
         else:
             notus_status = "matched"
 
-        if vt_entry is None:
-            enriched.append(
-                _enriched_result(
-                    result,
-                    vt_metadata_status=vt_status,
-                    vt_metadata=None,
-                    notus_metadata_status=notus_status,
-                    notus_metadata=notus_entries,
-                )
-            )
-            continue
-
-        cve_ids = extract_cve_ids_from_vt_metadata(vt_entry)
-        # VT metadata gives us the CVE ids; the optional SCAP index lets us
-        # expand those ids into richer vulnerability context for each finding.
+        vt_cve_ids = extract_cve_ids_from_vt_metadata(vt_entry)
+        notus_cve_ids = extract_cve_ids_from_notus_metadata(notus_entries)
+        cve_ids = sorted(set(vt_cve_ids + notus_cve_ids))
+        # VT metadata and richer Notus advisory metadata can both carry CVE ids;
+        # the optional SCAP index lets us expand those ids into richer
+        # vulnerability context for each finding.
         cve_metadata = [
             scap_cve_index[cve_id]
             for cve_id in cve_ids
@@ -177,7 +183,7 @@ def enrich_results(
             _enriched_result(
                 result,
                 vt_metadata_status=vt_status,
-                vt_metadata=select_vt_metadata_fields(vt_entry),
+                vt_metadata=select_vt_metadata_fields(vt_entry) if vt_entry is not None else None,
                 notus_metadata_status=notus_status,
                 notus_metadata=notus_entries,
                 cve_ids=cve_ids,

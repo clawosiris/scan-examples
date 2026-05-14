@@ -61,7 +61,7 @@ def test_resolve_notus_advisory_paths_finds_recursive_notus_files(tmp_path):
 
 
 def test_load_notus_advisory_index_indexes_entries_by_oid(tmp_path):
-    advisories_dir = tmp_path / "advisories"
+    advisories_dir = tmp_path / "products"
     advisories_dir.mkdir()
     advisory_path = advisories_dir / "example_os.notus"
     advisory_path.write_text(
@@ -90,6 +90,8 @@ def test_load_notus_advisory_index_indexes_entries_by_oid(tmp_path):
             "product_name": "Example OS",
             "package_type": "rpm",
             "advisory_file": "example_os.notus",
+            "notus_source_type": "product",
+            "source_files": ["example_os.notus"],
             "fixed_packages": [{"full_name": "pkg-1.2.3-1.x86_64"}],
         }
     ]
@@ -134,9 +136,15 @@ def test_enrich_results_uses_notus_advisories_when_vt_metadata_misses():
         "9.9.9": [
             {
                 "oid": "9.9.9",
+                "title": "Ubuntu: Security Advisory (USN-9999-1)",
+                "advisory_id": "USN-9999-1",
+                "cves": ["CVE-2026-0009"],
+                "summary": "Example advisory summary",
                 "product_name": "Example OS",
                 "package_type": "rpm",
-                "advisory_file": "example_os.notus",
+                "advisory_file": "ubuntu.notus",
+                "notus_source_type": "advisory",
+                "source_files": ["ubuntu.notus", "ubuntu_14.04.notus"],
                 "fixed_packages": [{"full_name": "pkg-2.0-1.x86_64"}],
             }
         ]
@@ -147,8 +155,10 @@ def test_enrich_results_uses_notus_advisories_when_vt_metadata_misses():
     assert enriched[0]["feed-metadata-source"] == "notus"
     assert enriched[0]["vt-metadata-status"] == "not_found"
     assert enriched[0]["notus-metadata-status"] == "matched"
+    assert enriched[0]["notus-metadata"][0]["title"] == "Ubuntu: Security Advisory (USN-9999-1)"
     assert enriched[0]["notus-metadata"][0]["product_name"] == "Example OS"
-    assert enriched[0]["cve-ids"] == []
+    assert enriched[0]["cve-ids"] == ["CVE-2026-0009"]
+    assert enriched[0]["cve-metadata-status"] == "metadata_unavailable"
 
 
 
@@ -206,6 +216,65 @@ def test_enrich_results_handles_unavailable_metadata_index():
             "cve-metadata": [],
         }
     ]
+
+
+def test_load_notus_advisory_index_merges_product_and_advisory_records_for_same_oid(tmp_path):
+    products_dir = tmp_path / "products"
+    advisories_dir = tmp_path / "advisories"
+    products_dir.mkdir()
+    advisories_dir.mkdir()
+
+    (products_dir / "ubuntu_14.04.notus").write_text(
+        json.dumps(
+            {
+                "version": "1.0",
+                "package_type": "deb",
+                "product_name": "Ubuntu 14.04",
+                "advisories": [
+                    {
+                        "oid": "1.2.3",
+                        "fixed_packages": [
+                            {"name": "samba", "full_version": "1.2.3-1", "specifier": ">="}
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (advisories_dir / "ubuntu.notus").write_text(
+        json.dumps(
+            {
+                "version": "1.0",
+                "advisories": [
+                    {
+                        "oid": "1.2.3",
+                        "title": "Ubuntu: Security Advisory (USN-1234-1)",
+                        "advisory_id": "USN-1234-1",
+                        "advisory_xref": "https://ubuntu.example/USN-1234-1",
+                        "cves": ["CVE-2026-0001"],
+                        "summary": "Example summary",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    _paths, notus_index = load_notus_advisory_index(tmp_path)
+    merged = notus_index["1.2.3"][0]
+
+    assert merged["title"] == "Ubuntu: Security Advisory (USN-1234-1)"
+    assert merged["advisory_id"] == "USN-1234-1"
+    assert merged["cves"] == ["CVE-2026-0001"]
+    assert merged["product_name"] == "Ubuntu 14.04"
+    assert merged["package_type"] == "deb"
+    assert merged["fixed_packages"] == [
+        {"name": "samba", "full_version": "1.2.3-1", "specifier": ">="}
+    ]
+    assert merged["source_files"] == ["ubuntu.notus", "ubuntu_14.04.notus"]
+    assert merged["notus_source_type"] == "advisory"
+
 
 
 def test_load_scap_cve_index_supports_nvd_2_payload(tmp_path):

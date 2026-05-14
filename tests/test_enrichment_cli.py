@@ -89,6 +89,7 @@ def test_enrich_results_from_files_supports_notus_only_enrichment(tmp_path):
     assert enriched[0]["feed-metadata-source"] == "notus"
     assert enriched[0]["notus-metadata-status"] == "matched"
     assert enriched[0]["notus-metadata"][0]["product_name"] == "Example OS"
+    assert enriched[0]["cve-ids"] == []
 
 
 

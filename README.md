@@ -261,9 +261,11 @@ If the file is unavailable, malformed, or shaped unexpectedly, the workflow stil
 results and marks VT enrichment as unavailable on each enriched result entry instead of
 faceplanting.
 
-For Notus-backed results, the example can also index the mounted `.notus` advisory files from
-`<NOTUS_PATH>` (for example `/var/lib/notus/advisories`). Those files provide OID-keyed product
-and fixed-package metadata for Notus advisories, which is separate from `vt-metadata.json`.
+For Notus-backed results, the example can also index the mounted `.notus` files from
+`<NOTUS_PATH>` (for example `/var/lib/notus/advisories`). In practice, the Notus feed can expose
+both sparse product/package mappings and richer advisory records for the same OID. The enrichment
+logic prefers the richer advisory-style data when present and merges in complementary package/fixed-
+version details from the product-style records.
 
 If `--scap-path` / `SCAP_PATH` points at SCAP/NVD CVE JSON data, enrichment then uses
 CVE references found in the matched VT metadata to attach CVE details such as descriptions,
