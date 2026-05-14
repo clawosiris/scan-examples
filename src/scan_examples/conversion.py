@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Helpers for turning feed data and scanner configs into scan payloads."""
+
+from __future__ import annotations
 
 import json
 import os
