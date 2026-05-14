@@ -312,6 +312,11 @@ Delete the scan after retrieving the required data.
 
 The scanner result data is intentionally minimal and must be enriched after retrieval.
 
+The current implementation supports three complementary enrichment sources:
+- `vt-metadata.json` for NASL VT metadata keyed by result OID
+- Notus `.notus` files for Notus-backed advisory and fixed-package metadata keyed by result OID
+- optional SCAP/NVD JSON data for CVE-level vulnerability metadata keyed by CVE ID
+
 ### VT Metadata
 
 VT metadata is contained in the feed and can be mapped using the OID from each scanner result. Therefore, all scanner results should be expanded using the data from `vt-metadata.json`.
@@ -372,9 +377,17 @@ The corresponding metadata entry in `vt-metadata.json` contains details such as 
 }
 ```
 
+### Notus Advisory Data
+
+Notus-backed results can be enriched from `.notus` feed files. In practice, the same OID may appear in both:
+- product-scoped files with sparse package/fixed-version mappings
+- aggregate advisory files with richer metadata such as advisory title, advisory ID, advisory URL, CVEs, summary, insight, affected scope, and severity
+
+The implementation prefers the richer advisory-style record when present and merges complementary fixed-package details from the product-style record.
+
 ### SCAP Data
 
-VT metadata can reference other sources, such as CVE IDs. These CVE IDs can be used to enrich scan results with information from SCAP data.
+VT metadata and richer Notus advisory metadata can reference other sources, such as CVE IDs. These CVE IDs can be used to enrich scan results with information from SCAP data.
 
 For the example OID `1.3.6.1.4.1.25623.1.0.147696`, the referenced CVE is:
 
@@ -391,7 +404,7 @@ SCAP data for this CVE includes:
 - CPE product matching data
 - CVSS v3.1 and v2 metrics
 
-The example performs this as a second enrichment stage: scanner results map to VT metadata by OID, VT metadata references provide CVE IDs, and optional SCAP/NVD JSON data indexed by CVE ID provides the additional vulnerability context. The output preserves the original scanner result and VT metadata while adding `cve_ids`, `cve_metadata_status`, and `cve_metadata`. Missing SCAP data is non-fatal so the scanner workflow still works with only `vt-metadata.json` mounted.
+The example performs this as a second enrichment stage: scanner results map to VT metadata and/or Notus advisory metadata by OID, those metadata sources provide CVE IDs, and optional SCAP/NVD JSON data indexed by CVE ID provides the additional vulnerability context. The output preserves the original scanner result and feed metadata while adding `cve-ids`, `cve-metadata-status`, and `cve-metadata`. Missing SCAP data is non-fatal so the scanner workflow still works with only `vt-metadata.json`, only Notus data, or both mounted.
 
 Relevant CVSS data from the example:
 

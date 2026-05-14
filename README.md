@@ -17,7 +17,7 @@ MIT. See `LICENSE`.
     volumes
   - `openvasd` REST API plus the required `ospd-openvas` scanner service/socket wiring
   - a `kirscht/metasploitable3-ub1404` target container for end-to-end scans
-- Unit tests and a self-hosted GitHub Actions workflow for end-to-end validation
+- Unit tests plus GitHub Actions workflows for Ruff linting and self-hosted end-to-end validation
 
 ## Configuration
 
@@ -329,9 +329,11 @@ This keeps the project virtualenv in `.venv/` and avoids ad-hoc `pip install` dr
 
 ## GitHub Actions
 
-The repo includes `.github/workflows/tests.yml` with:
-- `unit` on `ubuntu-latest`
-- `e2e` on the self-hosted runner label `scan-examples-e2e`
+The repo includes:
+- `.github/workflows/lint.yml` for `uv` + Ruff lint/format validation on `ubuntu-latest`
+- `.github/workflows/tests.yml` with:
+  - `unit` on `ubuntu-latest`
+  - `e2e` on the self-hosted runner label `scan-examples-e2e`
 
 That runner is intended to map to the dedicated Hetzner runner named `hetzner-vps-scan-examples`.
 
