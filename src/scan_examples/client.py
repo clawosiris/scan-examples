@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """HTTP client helpers for the OpenVAS scanner REST API example."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
