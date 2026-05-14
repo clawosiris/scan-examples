@@ -330,7 +330,9 @@ def _run_rust_enrichment(
             print(completed.stderr, end="")
         payload = json.loads(output_path.read_text(encoding="utf-8"))
 
-    if not isinstance(payload, list) or not all(isinstance(item, dict) for item in payload):
+    if not isinstance(payload, list) or not all(
+        isinstance(item, dict) for item in payload
+    ):
         raise ValueError("Rust enrichment output must be a JSON list of result objects")
     return payload
 

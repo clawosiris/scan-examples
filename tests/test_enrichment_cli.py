@@ -123,7 +123,9 @@ def _ensure_rust_enrichment_binary() -> Path:
     )
     rust_bin = resolve_rust_enrichment_binary()
     if rust_bin is None:
-        raise AssertionError("Rust enrichment binary was still unavailable after cargo build")
+        raise AssertionError(
+            "Rust enrichment binary was still unavailable after cargo build"
+        )
     return rust_bin
 
 
