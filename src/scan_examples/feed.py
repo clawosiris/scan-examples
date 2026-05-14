@@ -151,7 +151,15 @@ def _merge_notus_entries(entries: list[dict[str, Any]]) -> dict[str, Any]:
     def score(entry: dict[str, Any]) -> tuple[int, int]:
         rich_fields = sum(
             1
-            for key in ("title", "advisory_id", "advisory_xref", "cves", "summary", "insight", "severity")
+            for key in (
+                "title",
+                "advisory_id",
+                "advisory_xref",
+                "cves",
+                "summary",
+                "insight",
+                "severity",
+            )
             if entry.get(key)
         )
         source_bonus = 1 if entry.get("notus_source_type") == "advisory" else 0
@@ -180,7 +188,9 @@ def _merge_notus_entries(entries: list[dict[str, Any]]) -> dict[str, Any]:
     return merged
 
 
-def load_notus_advisory_index(notus_path: str | Path) -> tuple[list[Path], dict[str, list[dict[str, Any]]]]:
+def load_notus_advisory_index(
+    notus_path: str | Path,
+) -> tuple[list[Path], dict[str, list[dict[str, Any]]]]:
     """Load Notus advisory files and index them by advisory OID.
 
     A single OID may appear in more than one OS advisory file, so the index maps

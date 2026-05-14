@@ -300,7 +300,9 @@ def run_lifecycle(
             raise RuntimeError(f"Scan {scan_id} completed without findings")
 
         findings_summary = summarize_results(results)
-        enriched_results = enrich_results(results, vt_index, scap_cve_index, notus_index)
+        enriched_results = enrich_results(
+            results, vt_index, scap_cve_index, notus_index
+        )
 
         if completion_mode == "first-results":
             _emit(progress, f"Stopping scan {scan_id}")

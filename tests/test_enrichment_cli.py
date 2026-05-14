@@ -99,7 +99,6 @@ def test_enrich_results_from_files_supports_notus_only_enrichment(tmp_path):
     assert enriched[0]["cve-ids"] == []
 
 
-
 def test_standalone_enrichment_cli_writes_json_output(tmp_path):
     results_path = tmp_path / "results.json"
     vt_metadata_path = tmp_path / "vt-metadata.json"

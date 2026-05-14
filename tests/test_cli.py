@@ -27,15 +27,17 @@ def test_build_parser_supports_e2e_command(monkeypatch):
     monkeypatch.delenv("SCAP_PATH", raising=False)
     parser = build_parser()
 
-    args = parser.parse_args([
-        "e2e",
-        "--host",
-        "target",
-        "--output",
-        "result.json",
-        "--create-retries",
-        "3",
-    ])
+    args = parser.parse_args(
+        [
+            "e2e",
+            "--host",
+            "target",
+            "--output",
+            "result.json",
+            "--create-retries",
+            "3",
+        ]
+    )
 
     assert args.command == "e2e"
     assert args.host == ["target"]
@@ -59,19 +61,33 @@ def test_build_parser_supports_e2e_command(monkeypatch):
 def test_cmd_e2e_logs_default_ports_and_scan_config(monkeypatch, capsys, tmp_path):
     parser = build_parser()
     output_path = tmp_path / "result.json"
-    args = parser.parse_args([
-        "e2e",
-        "--host",
-        "target",
-        "--output",
-        str(output_path),
-    ])
+    args = parser.parse_args(
+        [
+            "e2e",
+            "--host",
+            "target",
+            "--output",
+            str(output_path),
+        ]
+    )
 
-    monkeypatch.setattr(cli, "discover_feed_layout", lambda *_args, **_kwargs: SimpleNamespace(vt_path=Path("/tmp/vt")))
-    monkeypatch.setattr(cli, "convert_scan_config", lambda **_kwargs: {"target": {}, "vts": []})
-    monkeypatch.setattr(cli, "_load_vt_index_for_cli", lambda _vt_path, progress=None: VT_INDEX)
-    monkeypatch.setattr(cli, "_load_notus_index_for_cli", lambda _notus_path, progress=None: None)
-    monkeypatch.setattr(cli, "_load_scap_index_for_cli", lambda _scap_path, progress=None: None)
+    monkeypatch.setattr(
+        cli,
+        "discover_feed_layout",
+        lambda *_args, **_kwargs: SimpleNamespace(vt_path=Path("/tmp/vt")),
+    )
+    monkeypatch.setattr(
+        cli, "convert_scan_config", lambda **_kwargs: {"target": {}, "vts": []}
+    )
+    monkeypatch.setattr(
+        cli, "_load_vt_index_for_cli", lambda _vt_path, progress=None: VT_INDEX
+    )
+    monkeypatch.setattr(
+        cli, "_load_notus_index_for_cli", lambda _notus_path, progress=None: None
+    )
+    monkeypatch.setattr(
+        cli, "_load_scap_index_for_cli", lambda _scap_path, progress=None: None
+    )
 
     class DummyClient:
         pass
@@ -79,7 +95,11 @@ def test_cmd_e2e_logs_default_ports_and_scan_config(monkeypatch, capsys, tmp_pat
     monkeypatch.setattr(cli, "_build_client", lambda _args: DummyClient())
 
     class DummyResult:
-        findings_summary = {"total": 1, "by_severity": {"high": 1}, "by_type": {"alarm": 1}}
+        findings_summary = {
+            "total": 1,
+            "by_severity": {"high": 1},
+            "by_type": {"alarm": 1},
+        }
         enriched_results = [
             {
                 "id": 1,
@@ -96,28 +116,42 @@ def test_cmd_e2e_logs_default_ports_and_scan_config(monkeypatch, capsys, tmp_pat
     assert cli.cmd_e2e(args) == 0
 
     captured = capsys.readouterr()
-    assert "[e2e] Scanning TCP ports: default ports from the scan config" in captured.err
+    assert (
+        "[e2e] Scanning TCP ports: default ports from the scan config" in captured.err
+    )
     assert "[e2e] Using scan config: full-and-fast" in captured.err
     assert "[e2e] Using SSH credential for msfadmin@target:22" in captured.err
     assert "[e2e] Enriched findings:" in captured.err
     assert Path(output_path).read_text(encoding="utf-8") == '{"ok": true}\n'
 
 
-def test_cmd_e2e_falls_back_to_bundled_ports_when_feed_default_portlist_is_missing(monkeypatch, tmp_path, capsys):
+def test_cmd_e2e_falls_back_to_bundled_ports_when_feed_default_portlist_is_missing(
+    monkeypatch, tmp_path, capsys
+):
     parser = build_parser()
     output_path = tmp_path / "result.json"
-    args = parser.parse_args([
-        "e2e",
-        "--host",
-        "target",
-        "--output",
-        str(output_path),
-    ])
+    args = parser.parse_args(
+        [
+            "e2e",
+            "--host",
+            "target",
+            "--output",
+            str(output_path),
+        ]
+    )
 
     attempts = []
-    monkeypatch.setattr(cli, "discover_feed_layout", lambda *_args, **_kwargs: SimpleNamespace(vt_path=Path("/tmp/vt")))
-    monkeypatch.setattr(cli, "_load_vt_index_for_cli", lambda _vt_path, progress=None: VT_INDEX)
-    monkeypatch.setattr(cli, "_load_notus_index_for_cli", lambda _notus_path, progress=None: None)
+    monkeypatch.setattr(
+        cli,
+        "discover_feed_layout",
+        lambda *_args, **_kwargs: SimpleNamespace(vt_path=Path("/tmp/vt")),
+    )
+    monkeypatch.setattr(
+        cli, "_load_vt_index_for_cli", lambda _vt_path, progress=None: VT_INDEX
+    )
+    monkeypatch.setattr(
+        cli, "_load_notus_index_for_cli", lambda _notus_path, progress=None: None
+    )
 
     def fake_convert_scan_config(**kwargs):
         attempts.append(kwargs)
@@ -141,34 +175,47 @@ def test_cmd_e2e_falls_back_to_bundled_ports_when_feed_default_portlist_is_missi
     assert attempts[0]["ssh_password"] == "msfadmin"
     assert attempts[0]["ssh_port"] == 22
     assert attempts[1]["tcp_ports"] == [21, 22, 80, 139, 445, 3306]
-    assert "falling back to bundled metasploitable service ports" in capsys.readouterr().err
+    assert (
+        "falling back to bundled metasploitable service ports"
+        in capsys.readouterr().err
+    )
 
 
 def test_cmd_e2e_passes_custom_scan_config_and_ports(monkeypatch, tmp_path):
     parser = build_parser()
     output_path = tmp_path / "result.json"
-    args = parser.parse_args([
-        "e2e",
-        "--host",
-        "target",
-        "--scan-config",
-        "custom-scan",
-        "--tcp-ports",
-        "22,80,445",
-        "--ssh-username",
-        "custom-user",
-        "--ssh-password",
-        "custom-pass",
-        "--ssh-port",
-        "2222",
-        "--output",
-        str(output_path),
-    ])
+    args = parser.parse_args(
+        [
+            "e2e",
+            "--host",
+            "target",
+            "--scan-config",
+            "custom-scan",
+            "--tcp-ports",
+            "22,80,445",
+            "--ssh-username",
+            "custom-user",
+            "--ssh-password",
+            "custom-pass",
+            "--ssh-port",
+            "2222",
+            "--output",
+            str(output_path),
+        ]
+    )
 
     captured = {}
-    monkeypatch.setattr(cli, "discover_feed_layout", lambda *_args, **_kwargs: SimpleNamespace(vt_path=Path("/tmp/vt")))
-    monkeypatch.setattr(cli, "_load_vt_index_for_cli", lambda _vt_path, progress=None: VT_INDEX)
-    monkeypatch.setattr(cli, "_load_notus_index_for_cli", lambda _notus_path, progress=None: None)
+    monkeypatch.setattr(
+        cli,
+        "discover_feed_layout",
+        lambda *_args, **_kwargs: SimpleNamespace(vt_path=Path("/tmp/vt")),
+    )
+    monkeypatch.setattr(
+        cli, "_load_vt_index_for_cli", lambda _vt_path, progress=None: VT_INDEX
+    )
+    monkeypatch.setattr(
+        cli, "_load_notus_index_for_cli", lambda _notus_path, progress=None: None
+    )
 
     def fake_convert_scan_config(**kwargs):
         captured.update(kwargs)
@@ -197,22 +244,32 @@ def test_cmd_e2e_uses_custom_scan_config_json(monkeypatch, tmp_path, capsys):
     custom_scan_config = tmp_path / "scan.json"
     custom_scan_config.write_text('{"target": {"hosts": []}, "vts": []}')
     output_path = tmp_path / "result.json"
-    args = parser.parse_args([
-        "e2e",
-        "--host",
-        "target",
-        "--scan-config-json",
-        str(custom_scan_config),
-        "--tcp-ports",
-        "22",
-        "--output",
-        str(output_path),
-    ])
+    args = parser.parse_args(
+        [
+            "e2e",
+            "--host",
+            "target",
+            "--scan-config-json",
+            str(custom_scan_config),
+            "--tcp-ports",
+            "22",
+            "--output",
+            str(output_path),
+        ]
+    )
 
     captured = {}
-    monkeypatch.setattr(cli, "discover_feed_layout", lambda *_args, **_kwargs: SimpleNamespace(vt_path=Path("/tmp/vt")))
-    monkeypatch.setattr(cli, "_load_vt_index_for_cli", lambda _vt_path, progress=None: VT_INDEX)
-    monkeypatch.setattr(cli, "_load_notus_index_for_cli", lambda _notus_path, progress=None: None)
+    monkeypatch.setattr(
+        cli,
+        "discover_feed_layout",
+        lambda *_args, **_kwargs: SimpleNamespace(vt_path=Path("/tmp/vt")),
+    )
+    monkeypatch.setattr(
+        cli, "_load_vt_index_for_cli", lambda _vt_path, progress=None: VT_INDEX
+    )
+    monkeypatch.setattr(
+        cli, "_load_notus_index_for_cli", lambda _notus_path, progress=None: None
+    )
 
     def fake_load_custom_scan_config(path, **kwargs):
         captured["path"] = path
@@ -220,7 +277,13 @@ def test_cmd_e2e_uses_custom_scan_config_json(monkeypatch, tmp_path, capsys):
         return {"target": {"hosts": kwargs["hosts"]}, "vts": []}
 
     monkeypatch.setattr(cli, "load_custom_scan_config", fake_load_custom_scan_config)
-    monkeypatch.setattr(cli, "convert_scan_config", lambda **_kwargs: (_ for _ in ()).throw(AssertionError("scannerctl path should not run")))
+    monkeypatch.setattr(
+        cli,
+        "convert_scan_config",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("scannerctl path should not run")
+        ),
+    )
     monkeypatch.setattr(cli, "_build_client", lambda _args: object())
 
     class DummyResult:
@@ -240,10 +303,12 @@ def test_cmd_e2e_uses_custom_scan_config_json(monkeypatch, tmp_path, capsys):
 
 def test_cmd_results_emits_enriched_json(monkeypatch, capsys):
     parser = build_parser()
-    args = parser.parse_args([
-        "get-results",
-        "scan-123",
-    ])
+    args = parser.parse_args(
+        [
+            "get-results",
+            "scan-123",
+        ]
+    )
 
     class DummyClient:
         def get_results(self, scan_id):
@@ -251,8 +316,12 @@ def test_cmd_results_emits_enriched_json(monkeypatch, capsys):
             return [{"id": 1, "oid": "1.2.3", "type": "alarm"}]
 
     monkeypatch.setattr(cli, "_build_client", lambda _args: DummyClient())
-    monkeypatch.setattr(cli, "_load_vt_index_for_cli", lambda _vt_path, progress=None: VT_INDEX)
-    monkeypatch.setattr(cli, "_load_notus_index_for_cli", lambda _notus_path, progress=None: None)
+    monkeypatch.setattr(
+        cli, "_load_vt_index_for_cli", lambda _vt_path, progress=None: VT_INDEX
+    )
+    monkeypatch.setattr(
+        cli, "_load_notus_index_for_cli", lambda _notus_path, progress=None: None
+    )
 
     assert cli.cmd_results(args) == 0
 
@@ -303,23 +372,27 @@ def test_build_parser_rejects_negative_poll_interval():
     parser = build_parser()
 
     with pytest.raises(SystemExit):
-        parser.parse_args([
-            "e2e",
-            "--host",
-            "target",
-            "--results-poll-interval",
-            "-1",
-        ])
+        parser.parse_args(
+            [
+                "e2e",
+                "--host",
+                "target",
+                "--results-poll-interval",
+                "-1",
+            ]
+        )
 
 
 def test_build_parser_rejects_negative_timeout():
     parser = build_parser()
 
     with pytest.raises(SystemExit):
-        parser.parse_args([
-            "e2e",
-            "--host",
-            "target",
-            "--results-timeout",
-            "-1",
-        ])
+        parser.parse_args(
+            [
+                "e2e",
+                "--host",
+                "target",
+                "--results-timeout",
+                "-1",
+            ]
+        )

@@ -115,7 +115,9 @@ def _load_vt_index_for_cli(
     return vt_index
 
 
-def _load_notus_index_for_cli(notus_path: str | None, progress: Callable[[str], None] | None = None) -> dict[str, list[dict[str, Any]]] | None:
+def _load_notus_index_for_cli(
+    notus_path: str | None, progress: Callable[[str], None] | None = None
+) -> dict[str, list[dict[str, Any]]] | None:
     """Load Notus advisory data, but degrade gracefully when it is unavailable."""
     if not notus_path:
         return None
@@ -123,15 +125,21 @@ def _load_notus_index_for_cli(notus_path: str | None, progress: Callable[[str], 
         paths, notus_index = load_notus_advisory_index(notus_path)
     except FileNotFoundError:
         if progress is not None:
-            progress(f"Notus advisory data not found under {notus_path}; continuing without Notus enrichment")
+            progress(
+                f"Notus advisory data not found under {notus_path}; continuing without Notus enrichment"
+            )
         return None
     except (json.JSONDecodeError, ValueError, OSError) as exc:
         if progress is not None:
-            progress(f"Failed to load Notus advisory data from {notus_path}: {exc}; continuing without Notus enrichment")
+            progress(
+                f"Failed to load Notus advisory data from {notus_path}: {exc}; continuing without Notus enrichment"
+            )
         return None
 
     if progress is not None:
-        progress(f"Loaded {len(notus_index)} Notus advisory OIDs from {len(paths)} file(s)")
+        progress(
+            f"Loaded {len(notus_index)} Notus advisory OIDs from {len(paths)} file(s)"
+        )
     return notus_index
 
 
@@ -241,7 +249,9 @@ def cmd_results(args: argparse.Namespace) -> int:
         {
             "scan_id": args.scan_id,
             "results": results,
-            "enriched_results": enrich_results(results, vt_index, scap_cve_index, notus_index),
+            "enriched_results": enrich_results(
+                results, vt_index, scap_cve_index, notus_index
+            ),
         },
         args.output,
     )
