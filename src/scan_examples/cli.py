@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Command-line entry points for the scan examples package."""
+
+from __future__ import annotations
 
 import argparse
 import json
