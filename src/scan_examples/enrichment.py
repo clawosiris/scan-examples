@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Result enrichment helpers for correlating findings with local feed metadata."""
+
+from __future__ import annotations
 
 import argparse
 import json
