@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Feed-loading utilities for VT metadata and SCAP CVE data."""
+
+from __future__ import annotations
 
 import gzip
 import json
