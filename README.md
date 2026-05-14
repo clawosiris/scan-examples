@@ -48,6 +48,8 @@ Supported environment variables:
   Notus-specific result enrichment
 - `SCAP_PATH` — optional path to SCAP/NVD CVE JSON data for second-stage CVE enrichment after VT OID matching
 - `SCANNERCTL_BIN` — path to `scannerctl`
+- `SCAN_EXAMPLES_ENRICHMENT_ENGINE` — default enrichment engine selection (`auto`, `python`, or `rust`)
+- `SCAN_EXAMPLES_RUST_ENRICHMENT_BIN` — optional explicit path to the `scan-enrich-results` Rust binary
 - `SCAN_CONFIG` — scan config to convert with `scannerctl` (defaults to `full-and-fast`)
 - `SCAN_CONFIG_JSON` — path to a custom scanner API scan config JSON payload, or a `.zip` containing one JSON file; when set, the e2e flow skips `scannerctl` conversion and uses this payload as a template
 - `TARGET_TCP_PORTS` — optional comma-separated TCP ports for the target definition; omit it to use the scan config defaults
@@ -85,9 +87,13 @@ openvas-example delete-scan <scan-id>
 
 ### Enrich scanner results offline
 
-Use `openvas-enrich-results` when you already have scanner output and local feed metadata. This is
-the same enrichment logic used by the e2e flow, exposed as a standalone command for post-processing
-saved scanner output.
+There are now two enrichment entry points:
+- `openvas-enrich-results` — the Python-facing wrapper CLI shipped by this package
+- `scan-enrich-results` — the Rust binary built from `rust/scan-enrichment`
+
+`openvas-enrich-results` is the stable user-facing command for post-processing saved scanner output.
+It uses the same enrichment logic as the e2e flow and defaults to the Rust engine when the binary is
+available, while still letting you explicitly select the Python reference implementation.
 
 Required inputs:
 - `--results` — scanner results JSON, either a raw result array or an object containing a `results`
@@ -99,6 +105,7 @@ Required inputs:
 Optional inputs:
 - `--scap-path` — Greenbone/NVD SCAP CVE JSON data for second-stage CVE enrichment
 - `--engine {auto,python,rust}` — choose the enrichment engine; `auto` prefers Rust when the binary is available, while `python` keeps the readable reference implementation available
+- `--rust-bin` — explicit path to the `scan-enrich-results` binary when you do not want auto-discovery
 - `--output` — output file; omit it to print enriched JSON to stdout
 
 ```bash
@@ -112,6 +119,18 @@ openvas-enrich-results \
 
 By default the CLI and e2e flow prefer the Rust enrichment binary when it is present. The current
 Python implementation stays available as an explicit `--engine python` reference/debug path.
+
+If you want to invoke the Rust binary directly, build it first and call `scan-enrich-results`:
+
+```bash
+cargo build --release -p scan-enrichment
+./target/release/scan-enrich-results \
+  --results scan-results.json \
+  --vt-metadata /feed/vulnerability-tests/vt-metadata.json \
+  --notus-path /var/lib/notus/advisories \
+  --scap-path /feed/scap-data \
+  --output enriched-results.json
+```
 
 The Python API is available from `scan_examples.enrichment` for callers that want to embed the
 same logic directly:
@@ -140,6 +159,7 @@ This command:
 4. Polls according to the configured completion mode: quick checks stop after first findings; full checks wait for the scan status to reach `succeeded`
 5. Fetches results in JSON format
 6. Enriches each result with matching NASL VT metadata from `vt-metadata.json` and/or matching Notus advisory metadata from `.notus` files when available (Rust by default when bundled, Python optionally for reference/debugging)
+   - current implementation selectively loads feed metadata by OID/CVE, but it does not yet stream the full raw result set end-to-end
 7. Stops the scan after first findings in quick mode, or lets it finish naturally in full mode
 8. Deletes the scan
 
@@ -327,9 +347,28 @@ Run the tests or CLI inside the managed environment:
 ```bash
 uv run pytest
 uv run openvas-example --help
+uv run openvas-enrich-results --help
+```
+
+Build the Rust binary locally when you want to test the default Rust-backed path outside the Docker image:
+
+```bash
+cargo build --release -p scan-enrichment
+./target/release/scan-enrich-results --help
 ```
 
 This keeps the project virtualenv in `.venv/` and avoids ad-hoc `pip install` drift.
+
+## VS Code devcontainer
+
+A `.devcontainer/devcontainer.json` is included for VS Code / Dev Containers users.
+It provisions:
+- Python 3.11
+- Rust stable
+- Docker-outside-of-Docker support for running the local Compose stack
+- `uv sync --locked --extra dev` on first create
+
+It also preconfigures common Python/Rust extensions and forwards port `3000` for the local `openvasd` API published by the Compose stack.
 
 ## GitHub Actions
 
@@ -338,6 +377,11 @@ The repo includes:
 - `.github/workflows/tests.yml` with:
   - `unit` on `ubuntu-latest`
   - `e2e` on the self-hosted runner label `scan-examples-e2e`
+- `.github/workflows/nightly-rust-release.yml` for a nightly/manual Rust release build that:
+  - installs Python + Rust toolchains
+  - runs the Python test suite first
+  - builds `scan-enrich-results` in release mode
+  - uploads the Linux x86_64 binary plus a SHA-256 sidecar as a GitHub Actions artifact
 
 That runner is intended to map to the dedicated Hetzner runner named `hetzner-vps-scan-examples`.
 
