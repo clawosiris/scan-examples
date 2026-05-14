@@ -1,0 +1,48 @@
+name: nightly-rust-release
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  build-nightly-rust-binary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.11'
+          enable-cache: true
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            rust/scan-enrichment -> target
+
+      - name: Sync package + test deps
+        run: uv sync --locked --extra dev
+
+      - name: Run Python unit tests
+        run: uv run pytest
+
+      - name: Build Rust release binary
+        run: cargo build --release -p scan-enrichment
+
+      - name: Package nightly binary artifact
+        run: |
+          mkdir -p dist
+          cp target/release/scan-enrich-results dist/scan-enrich-results-linux-x86_64
+          sha256sum dist/scan-enrich-results-linux-x86_64 > dist/scan-enrich-results-linux-x86_64.sha256
+
+      - name: Upload nightly binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: scan-enrich-results-nightly-linux-x86_64
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
