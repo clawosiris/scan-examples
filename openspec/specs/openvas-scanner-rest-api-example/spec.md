@@ -49,12 +49,12 @@ The Python example SHALL cover the documented scan lifecycle operations for the 
 - **AND** reports success or failure in a user-visible way.
 
 #### Scenario: Get scan results
-- **GIVEN** a created scan identifier and the mounted Greenbone vulnerability-test feed
+- **GIVEN** a created scan identifier and the mounted Greenbone feed data needed for enrichment
 - **WHEN** the example fetches results
 - **THEN** it requests scan results from the scanner API
 - **AND** retries result polling until findings appear or a configured timeout is reached
 - **AND** preserves the raw scanner results in a stable machine-readable format for automation and tests
-- **AND** enriches results that include an OID with metadata from `vt-metadata.json` when that metadata is available.
+- **AND** enriches results that include an OID with metadata from `vt-metadata.json` and/or matching Notus advisory data when that metadata is available.
 
 #### Scenario: Delete a scan
 - **GIVEN** a created scan identifier
@@ -96,15 +96,23 @@ The repository SHALL provide example code that expands scanner results with meta
   a separate `result` object.
 
 #### Scenario: Enrich result by CVE from optional SCAP data
-- **GIVEN** a scanner result whose matched VT metadata references one or more CVE IDs
+- **GIVEN** a scanner result whose matched VT metadata and/or matched Notus advisory metadata references one or more CVE IDs
 - **AND** SCAP/NVD CVE JSON data is configured
 - **WHEN** the enrichment step processes that result
 - **THEN** it looks up the referenced CVE IDs in the SCAP CVE index
 - **AND** includes useful CVE metadata such as descriptions, timestamps, references, weaknesses, CVSS metrics, and affected CPEs when available
 - **AND** marks whether CVE metadata was matched, partially matched, unavailable, or not found.
 
-#### Scenario: Result has no matching VT metadata
-- **GIVEN** a scanner result whose OID is missing from the local VT metadata index or is absent entirely
+#### Scenario: Enrich result by Notus advisory OID
+- **GIVEN** a scanner result containing an OID present in one or more local `.notus` files
+- **WHEN** the enrichment step processes that result
+- **THEN** it includes useful Notus metadata such as advisory title, advisory ID, advisory reference URL, CVE list, summary, insight, affected package scope, severity, and fixed-package details when available
+- **AND** preserves the original scanner result fields at the enriched result entry top level
+- **AND** prefers richer advisory-style Notus records over sparse product-only records when the same OID appears in both places
+- **AND** merges complementary package and fixed-version details from the product-style records when available.
+
+#### Scenario: Result has no matching VT or Notus metadata
+- **GIVEN** a scanner result whose OID is missing from the local VT metadata index, local Notus advisory index, or is absent entirely
 - **WHEN** the enrichment step processes that result
 - **THEN** it does not fail the whole workflow solely because enrichment data is missing
 - **AND** preserves the original scanner result fields at the enriched result entry top level
@@ -123,7 +131,7 @@ The repository SHALL provide example code that expands scanner results with meta
 - **AND** emits a brief user-visible message that CVE enrichment was skipped.
 
 #### Scenario: Enrich existing scanner output offline
-- **GIVEN** a scanner output JSON file and a required `vt-metadata.json` file
+- **GIVEN** a scanner output JSON file and at least one local enrichment source (`vt-metadata.json` and/or Notus `.notus` files)
 - **AND** optional SCAP/NVD CVE JSON data may be provided
 - **WHEN** the standalone enrichment CLI processes those files
 - **THEN** it writes enriched JSON to stdout or the requested output file
@@ -158,18 +166,25 @@ The repository SHALL declare a permissive license suitable for both proprietary 
 - **THEN** the repository includes an MIT `LICENSE` file
 - **AND** the README and package metadata identify the project as MIT-licensed.
 
-### Requirement: GitHub Actions workflow for validation
-The repository SHALL provide a GitHub Actions workflow that validates the example in CI.
+### Requirement: GitHub Actions workflows for validation
+The repository SHALL provide GitHub Actions workflows that validate both code quality and the end-to-end example behavior in CI.
 
 #### Scenario: CI builds and runs e2e workflow
 - **GIVEN** a push or pull request that changes the example, container, or test assets
-- **WHEN** the GitHub Actions workflow runs
+- **WHEN** the GitHub Actions test workflow runs
 - **THEN** it builds the example container
 - **AND** starts the Docker Compose test environment
 - **AND** uses the bundled custom scan config JSON archive as the default e2e scan config
 - **AND** runs the e2e test in quick completion mode for pull requests and non-main pushes
 - **AND** runs the e2e test in full scan-completion mode for pushes to `main`
 - **AND** preserves logs or artifacts sufficient to debug failures.
+
+#### Scenario: CI runs lint checks with UV-managed Ruff tooling
+- **GIVEN** a push or pull request that changes the Python example or tests
+- **WHEN** the GitHub Actions lint workflow runs
+- **THEN** it installs the repo's dev dependencies with `uv sync --locked --extra dev`
+- **AND** runs `ruff check .`
+- **AND** runs `ruff format --check .`.
 
 ### Requirement: Feed synchronization via greenbone-feed-sync
 The repository SHALL synchronize required Greenbone feed content with `greenbone-feed-sync` instead of
