@@ -317,6 +317,26 @@ The current implementation supports three complementary enrichment sources:
 - Notus `.notus` files for Notus-backed advisory and fixed-package metadata keyed by result OID
 - optional SCAP/NVD JSON data for CVE-level vulnerability metadata keyed by CVE ID
 
+The enriched JSON intentionally preserves the original scanner result shape at the top level of each result entry. Enrichment fields are added directly to each result rather than wrapping the original result inside a nested `result` object.
+
+### Raw Result Shape
+
+Example raw result entry returned by the scanner:
+
+```json
+[
+  {
+    "id": 3,
+    "type": "alarm",
+    "ip_address": "127.0.0.1",
+    "hostname": "localhost",
+    "oid": "1.3.6.1.4.1.25623.1.0.147696",
+    "protocol": "tcp",
+    "message": "Installed version: 9.53.3\nFixed version: 9.55\nInstallation\npath / port: /usr/bin/gs"
+  }
+]
+```
+
 ### VT Metadata
 
 VT metadata is contained in the feed and can be mapped using the OID from each scanner result. Therefore, all scanner results should be expanded using the data from `vt-metadata.json`.
@@ -377,6 +397,57 @@ The corresponding metadata entry in `vt-metadata.json` contains details such as 
 }
 ```
 
+#### Example Result Enriched with VT Metadata
+
+```json
+[
+  {
+    "id": 3,
+    "type": "alarm",
+    "ip_address": "127.0.0.1",
+    "hostname": "localhost",
+    "oid": "1.3.6.1.4.1.25623.1.0.147696",
+    "protocol": "tcp",
+    "message": "Installed version: 9.53.3\nFixed version: 9.55\nInstallation\npath / port: /usr/bin/gs",
+    "feed-metadata-source": "vt",
+    "vt-metadata-status": "matched",
+    "vt-metadata": {
+      "oid": "1.3.6.1.4.1.25623.1.0.147696",
+      "name": "Ghostscript 9.50 < 9.55.0 Sandbox Escape Vulnerability - Linux",
+      "filename": "2022/artifex/gb_ghostscript_sandbox_escape_vuln_sep21_lin.nasl",
+      "references": [
+        {
+          "class": "cve",
+          "id": "CVE-2021-3781"
+        },
+        {
+          "class": "URL",
+          "id": "https://ghostscript.com/blog/CVE-2021-3781.html"
+        }
+      ],
+      "tag": {
+        "summary": "Ghostscript is prone to a sandbox escape vulnerability.",
+        "solution": "Update to version 9.55 or later."
+      },
+      "dependencies": [
+        "secpod_ghostscript_detect_lin.nasl"
+      ],
+      "required_ports": [],
+      "required_udp_ports": [],
+      "category": "gather_info",
+      "family": "General"
+    },
+    "notus-metadata-status": "metadata_unavailable",
+    "notus-metadata": [],
+    "cve-ids": [
+      "CVE-2021-3781"
+    ],
+    "cve-metadata-status": "metadata_unavailable",
+    "cve-metadata": []
+  }
+]
+```
+
 ### Notus Advisory Data
 
 Notus-backed results can be enriched from `.notus` feed files. In practice, the same OID may appear in both:
@@ -384,6 +455,118 @@ Notus-backed results can be enriched from `.notus` feed files. In practice, the 
 - aggregate advisory files with richer metadata such as advisory title, advisory ID, advisory URL, CVEs, summary, insight, affected scope, and severity
 
 The implementation prefers the richer advisory-style record when present and merges complementary fixed-package details from the product-style record.
+
+For example, the OID `1.3.6.1.4.1.25623.1.1.12.2019.4217.2` appears in both a product file and a richer Ubuntu advisory aggregate.
+
+#### Example Product-Scoped Notus Entry
+
+```json
+{
+  "oid": "1.3.6.1.4.1.25623.1.1.12.2019.4217.2",
+  "fixed_packages": [
+    {
+      "name": "libsmbclient",
+      "full_version": "2:4.3.11+dfsg-0ubuntu0.14.04.20+esm4",
+      "specifier": ">="
+    },
+    {
+      "name": "samba",
+      "full_version": "2:4.3.11+dfsg-0ubuntu0.14.04.20+esm4",
+      "specifier": ">="
+    }
+  ]
+}
+```
+
+This style of entry comes from a product-specific file such as `products/ubuntu_14.04.notus` and is useful for package and fixed-version context, but it is sparse.
+
+#### Example Advisory-Scoped Notus Entry
+
+```json
+{
+  "oid": "1.3.6.1.4.1.25623.1.1.12.2019.4217.2",
+  "title": "Ubuntu: Security Advisory (USN-4217-2)",
+  "creation_date": 1661499803,
+  "last_modification": 1706846941,
+  "advisory_id": "USN-4217-2",
+  "advisory_xref": "https://ubuntu.com/security/notices/USN-4217-2",
+  "cves": [
+    "CVE-2019-14861",
+    "CVE-2019-14870"
+  ],
+  "summary": "The remote host is missing an update for the 'samba' package(s) announced via the USN-4217-2 advisory.",
+  "insight": "USN-4217-1 fixed several vulnerabilities in Samba. This update provides the corresponding update for Ubuntu 14.04 ESM.",
+  "affected": "'samba' package(s) on Ubuntu 14.04.",
+  "xrefs": [],
+  "qod_type": "package",
+  "severity": {
+    "origin": "NVD",
+    "date": 1576685544,
+    "cvss_v2": "AV:N/AC:L/Au:N/C:P/I:P/A:N",
+    "cvss_v3": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:N"
+  }
+}
+```
+
+This style of entry comes from an aggregate advisory file such as `advisories/ubuntu.notus` and provides the higher-value human-facing metadata.
+
+#### Example Result Enriched with Merged Notus Data
+
+```json
+[
+  {
+    "id": 42,
+    "type": "alarm",
+    "hostname": "target",
+    "oid": "1.3.6.1.4.1.25623.1.1.12.2019.4217.2",
+    "message": "Package samba is installed in a vulnerable version.",
+    "feed-metadata-source": "notus",
+    "vt-metadata-status": "not_found",
+    "vt-metadata": null,
+    "notus-metadata-status": "matched",
+    "notus-metadata": [
+      {
+        "oid": "1.3.6.1.4.1.25623.1.1.12.2019.4217.2",
+        "advisory_file": "ubuntu.notus",
+        "notus_source_type": "advisory",
+        "source_files": [
+          "ubuntu.notus",
+          "ubuntu_14.04.notus"
+        ],
+        "product_name": "Ubuntu 14.04",
+        "package_type": "deb",
+        "title": "Ubuntu: Security Advisory (USN-4217-2)",
+        "advisory_id": "USN-4217-2",
+        "advisory_xref": "https://ubuntu.com/security/notices/USN-4217-2",
+        "cves": [
+          "CVE-2019-14861",
+          "CVE-2019-14870"
+        ],
+        "summary": "The remote host is missing an update for the 'samba' package(s) announced via the USN-4217-2 advisory.",
+        "affected": "'samba' package(s) on Ubuntu 14.04.",
+        "fixed_packages": [
+          {
+            "name": "libsmbclient",
+            "full_version": "2:4.3.11+dfsg-0ubuntu0.14.04.20+esm4",
+            "specifier": ">="
+          },
+          {
+            "name": "samba",
+            "full_version": "2:4.3.11+dfsg-0ubuntu0.14.04.20+esm4",
+            "specifier": ">="
+          }
+        ]
+      }
+    ],
+    "cve-ids": [
+      "CVE-2019-14861",
+      "CVE-2019-14870"
+    ],
+    "cve-metadata-status": "metadata_unavailable",
+    "cve-metadata": []
+  }
+]
+```
 
 ### SCAP Data
 
