@@ -55,7 +55,8 @@ Supported environment variables:
 
 ## CLI commands
 
-The Docker image and local package expose `openvas-example`.
+The Docker image and local package expose `openvas-example` for scanner lifecycle examples and
+`openvas-enrich-results` for standalone result enrichment.
 
 ### Convert a scan configuration
 
@@ -77,6 +78,24 @@ openvas-example stop-scan <scan-id>
 openvas-example get-results <scan-id>
 openvas-example delete-scan <scan-id>
 ```
+
+### Enrich scanner results offline
+
+Use `openvas-enrich-results` when you already have scanner output and local feed metadata. The
+`--vt-metadata` input is required and can point either at `vt-metadata.json` or a directory
+containing it. `--scap-path` is optional and adds CVE metadata when SCAP/NVD JSON data is
+available.
+
+```bash
+openvas-enrich-results \
+  --results scan-results.json \
+  --vt-metadata /feed/vulnerability-tests/vt-metadata.json \
+  --scap-path /feed/scap-data \
+  --output enriched-results.json
+```
+
+The `--results` file can be either a raw scanner result array or an object containing a `results`
+array. The command writes an enriched result array to stdout unless `--output` is set.
 
 ### Run the end-to-end flow
 

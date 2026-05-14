@@ -20,6 +20,7 @@ dev = [
 
 [project.scripts]
 openvas-example = "scan_examples.cli:main"
+openvas-enrich-results = "scan_examples.enrichment:main"
 
 [tool.pytest.ini_options]
 addopts = "-q"

@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import json
 
-from scan_examples.feed import (
+from scan_examples.enrichment import (
     dump_pretty_enriched_results,
     enrich_results,
     extract_result_oid,
-    load_scap_cve_index,
-    load_vt_metadata_index,
-    resolve_vt_metadata_path,
 )
+from scan_examples.feed import load_scap_cve_index, load_vt_metadata_index, resolve_vt_metadata_path
 
 
 def test_resolve_vt_metadata_path_supports_root_file(tmp_path):
