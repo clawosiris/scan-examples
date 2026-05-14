@@ -305,7 +305,13 @@ def run_lifecycle(
             raise RuntimeError(f"Scan {scan_id} completed without findings")
 
         findings_summary = summarize_results(results)
-        if vt_metadata_path is not None or notus_path is not None:
+        if enrichment_engine == "python" and any(
+            index is not None for index in (vt_index, notus_index, scap_cve_index)
+        ):
+            enriched_results = enrich_results(
+                results, vt_index, scap_cve_index, notus_index
+            )
+        elif vt_metadata_path is not None or notus_path is not None:
             enriched_results = enrich_results_records(
                 results=results,
                 vt_metadata_path=vt_metadata_path,

@@ -166,6 +166,33 @@ def test_run_lifecycle_emits_progress_in_order(monkeypatch):
     ]
 
 
+def test_run_lifecycle_reuses_preloaded_python_indexes(monkeypatch):
+    client = DummyClient(
+        results_sequence=[[{"id": 1, "oid": "1.2.3", "type": "alarm"}]]
+    )
+    monkeypatch.setattr("scan_examples.e2e.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr("scan_examples.e2e.time.monotonic", lambda: 0.0)
+
+    def fail_if_called(**_kwargs):
+        raise AssertionError("file-backed enrichment should not be called")
+
+    monkeypatch.setattr("scan_examples.e2e.enrich_results_records", fail_if_called)
+
+    result = run_lifecycle(
+        client=client,
+        payload={"target": {}, "vts": []},
+        wait_before_results=0,
+        results_timeout=60,
+        results_poll_interval=5,
+        vt_index=VT_INDEX,
+        vt_metadata_path="/tmp/vt",
+        enrichment_engine="python",
+    )
+
+    assert result.enriched_results[0]["feed-metadata-source"] == "vt"
+    assert result.enriched_results[0]["vt-metadata"]["name"] == "Example VT"
+
+
 def test_run_lifecycle_uses_selected_enrichment_engine_for_file_backed_flow(
     monkeypatch,
 ):

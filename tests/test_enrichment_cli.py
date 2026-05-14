@@ -3,6 +3,7 @@ import subprocess
 from pathlib import Path
 
 from scan_examples.enrichment import (
+    _run_rust_enrichment,
     enrich_results_from_files,
     load_scan_results,
     main,
@@ -153,6 +154,40 @@ def test_rust_engine_matches_python_reference_output_for_existing_raw_scan_resul
     assert rust_payload[0]["feed-metadata-source"] == "vt"
     assert rust_payload[1]["feed-metadata-source"] == "notus"
     assert rust_payload[2]["vt-metadata-status"] == "missing_oid"
+
+
+def test_run_rust_enrichment_forwards_stderr_without_corrupting_stdout(
+    monkeypatch, tmp_path, capsys
+):
+    results_path = tmp_path / "results.json"
+    results_path.write_text(json.dumps([{"id": 1, "oid": "1.2.3"}]), encoding="utf-8")
+
+    class Completed:
+        stderr = "warning from rust\n"
+
+    def fake_run(command, check, capture_output, text):
+        output_path = Path(command[command.index("--output") + 1])
+        output_path.write_text(
+            json.dumps([{"id": 1, "feed-metadata-source": "vt"}]),
+            encoding="utf-8",
+        )
+        assert check is True
+        assert capture_output is True
+        assert text is True
+        return Completed()
+
+    monkeypatch.setattr(
+        "scan_examples.enrichment.resolve_rust_enrichment_binary",
+        lambda _rust_bin=None: Path("/tmp/scan-enrich-results"),
+    )
+    monkeypatch.setattr("scan_examples.enrichment.subprocess.run", fake_run)
+
+    payload = _run_rust_enrichment(results_path=results_path)
+
+    captured = capsys.readouterr()
+    assert payload == [{"id": 1, "feed-metadata-source": "vt"}]
+    assert captured.out == ""
+    assert captured.err == "warning from rust\n"
 
 
 def test_standalone_enrichment_cli_writes_json_output(tmp_path):

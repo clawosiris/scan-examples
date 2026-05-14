@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -327,7 +328,7 @@ def _run_rust_enrichment(
             text=True,
         )
         if completed.stderr:
-            print(completed.stderr, end="")
+            print(completed.stderr, end="", file=sys.stderr)
         payload = json.loads(output_path.read_text(encoding="utf-8"))
 
     if not isinstance(payload, list) or not all(

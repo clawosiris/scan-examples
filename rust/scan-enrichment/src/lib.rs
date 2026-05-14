@@ -1,5 +1,6 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
@@ -17,7 +18,8 @@ pub fn run_cli(
     scap_path: Option<&Path>,
     output_path: Option<&Path>,
 ) -> Result<()> {
-    let enriched = enrich_results_from_files(results_path, vt_metadata_path, notus_path, scap_path)?;
+    let enriched =
+        enrich_results_from_files(results_path, vt_metadata_path, notus_path, scap_path)?;
     let rendered = serde_json::to_string_pretty(&enriched)?;
     if let Some(path) = output_path {
         fs::write(path, format!("{rendered}\n"))?;
@@ -67,36 +69,41 @@ pub fn enrich_results_from_files(
         None => None,
     };
 
-    Ok(enrich_results(results, vt_index.as_ref(), notus_index.as_ref(), scap_index.as_ref()))
+    Ok(enrich_results(
+        results,
+        vt_index.as_ref(),
+        notus_index.as_ref(),
+        scap_index.as_ref(),
+    ))
 }
 
 fn load_results(path: &Path) -> Result<Vec<Map<String, Value>>> {
     let payload = read_json(path)?;
     match payload {
-        Value::Array(items) => items
-            .into_iter()
-            .map(as_object)
-            .collect::<Result<Vec<_>>>(),
+        Value::Array(items) => items.into_iter().map(as_object).collect::<Result<Vec<_>>>(),
         Value::Object(mut obj) => {
-            let results = obj
-                .remove("results")
-                .ok_or_else(|| anyhow!("Scanner results JSON must be a list or an object with a results list"))?;
+            let results = obj.remove("results").ok_or_else(|| {
+                anyhow!("Scanner results JSON must be a list or an object with a results list")
+            })?;
             match results {
-                Value::Array(items) => items
-                    .into_iter()
-                    .map(as_object)
-                    .collect::<Result<Vec<_>>>(),
-                _ => Err(anyhow!("Scanner results JSON must be a list or an object with a results list")),
+                Value::Array(items) => items.into_iter().map(as_object).collect::<Result<Vec<_>>>(),
+                _ => Err(anyhow!(
+                    "Scanner results JSON must be a list or an object with a results list"
+                )),
             }
         }
-        _ => Err(anyhow!("Scanner results JSON must be a list or an object with a results list")),
+        _ => Err(anyhow!(
+            "Scanner results JSON must be a list or an object with a results list"
+        )),
     }
 }
 
 fn as_object(value: Value) -> Result<Map<String, Value>> {
     match value {
         Value::Object(obj) => Ok(obj),
-        _ => Err(anyhow!("Scanner results JSON must contain only result objects")),
+        _ => Err(anyhow!(
+            "Scanner results JSON must contain only result objects"
+        )),
     }
 }
 
@@ -124,7 +131,10 @@ fn resolve_vt_metadata_path(path: &Path) -> Result<PathBuf> {
     if path.is_file() {
         return Ok(path.to_path_buf());
     }
-    for candidate in [path.join(VT_METADATA_FILENAME), path.join("nasl").join(VT_METADATA_FILENAME)] {
+    for candidate in [
+        path.join(VT_METADATA_FILENAME),
+        path.join("nasl").join(VT_METADATA_FILENAME),
+    ] {
         if candidate.is_file() {
             return Ok(candidate);
         }
@@ -136,13 +146,18 @@ fn resolve_vt_metadata_path(path: &Path) -> Result<PathBuf> {
         .map(|entry| entry.into_path())
         .collect::<Vec<_>>();
     matches.sort();
-    matches
-        .into_iter()
-        .next()
-        .ok_or_else(|| anyhow!("Could not find {VT_METADATA_FILENAME} under {}", path.display()))
+    matches.into_iter().next().ok_or_else(|| {
+        anyhow!(
+            "Could not find {VT_METADATA_FILENAME} under {}",
+            path.display()
+        )
+    })
 }
 
-fn load_vt_metadata_index(path: &Path, needed_oids: &HashSet<String>) -> Result<HashMap<String, Value>> {
+fn load_vt_metadata_index(
+    path: &Path,
+    needed_oids: &HashSet<String>,
+) -> Result<HashMap<String, Value>> {
     let metadata_path = resolve_vt_metadata_path(path)?;
     let payload = read_json(&metadata_path)?;
     let entries = normalize_vt_metadata_payload(payload)?;
@@ -197,11 +212,19 @@ fn select_vt_metadata_fields(entry: &Map<String, Value>) -> Value {
 
 fn extract_cve_ids_from_vt_metadata(entry: &Value) -> Vec<String> {
     let mut cves = BTreeSet::new();
-    let Some(obj) = entry.as_object() else { return Vec::new(); };
-    let Some(Value::Array(references)) = obj.get("references") else { return Vec::new(); };
+    let Some(obj) = entry.as_object() else {
+        return Vec::new();
+    };
+    let Some(Value::Array(references)) = obj.get("references") else {
+        return Vec::new();
+    };
     for reference in references {
-        let Some(reference_obj) = reference.as_object() else { continue; };
-        let Some(Value::String(id)) = reference_obj.get("id") else { continue; };
+        let Some(reference_obj) = reference.as_object() else {
+            continue;
+        };
+        let Some(Value::String(id)) = reference_obj.get("id") else {
+            continue;
+        };
         let upper = id.to_uppercase();
         if !upper.starts_with(CVE_PREFIX) {
             continue;
@@ -223,7 +246,10 @@ fn resolve_notus_advisory_paths(path: &Path) -> Result<Vec<PathBuf>> {
         return Ok(vec![path.to_path_buf()]);
     }
     if !path.exists() {
-        return Err(anyhow!("Could not find Notus advisories under {}", path.display()));
+        return Err(anyhow!(
+            "Could not find Notus advisories under {}",
+            path.display()
+        ));
     }
     let mut matches = WalkDir::new(path)
         .into_iter()
@@ -234,34 +260,58 @@ fn resolve_notus_advisory_paths(path: &Path) -> Result<Vec<PathBuf>> {
         .collect::<Vec<_>>();
     matches.sort();
     if matches.is_empty() {
-        return Err(anyhow!("Could not find Notus advisory files under {}", path.display()));
+        return Err(anyhow!(
+            "Could not find Notus advisory files under {}",
+            path.display()
+        ));
     }
     Ok(matches)
 }
 
-fn load_notus_advisory_index(path: &Path, needed_oids: &HashSet<String>) -> Result<HashMap<String, Vec<Value>>> {
+fn load_notus_advisory_index(
+    path: &Path,
+    needed_oids: &HashSet<String>,
+) -> Result<HashMap<String, Vec<Value>>> {
     let paths = resolve_notus_advisory_paths(path)?;
     let mut raw_index: HashMap<String, Vec<Map<String, Value>>> = HashMap::new();
     for advisory_path in paths {
         let payload = read_json(&advisory_path)?;
         let Some(obj) = payload.as_object() else {
-            return Err(anyhow!("Unsupported Notus advisory payload shape in {}", advisory_path.display()));
+            return Err(anyhow!(
+                "Unsupported Notus advisory payload shape in {}",
+                advisory_path.display()
+            ));
         };
-        let product_name = obj.get("product_name").and_then(Value::as_str).map(str::to_string);
-        let package_type = obj.get("package_type").and_then(Value::as_str).map(str::to_string);
-        let Some(Value::Array(advisories)) = obj.get("advisories") else { continue; };
+        let product_name = obj
+            .get("product_name")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        let package_type = obj
+            .get("package_type")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        let Some(Value::Array(advisories)) = obj.get("advisories") else {
+            continue;
+        };
         for advisory in advisories {
-            let Some(advisory_obj) = advisory.as_object() else { continue; };
-            let Some(oid) = advisory_obj.get("oid").and_then(Value::as_str) else { continue; };
+            let Some(advisory_obj) = advisory.as_object() else {
+                continue;
+            };
+            let Some(oid) = advisory_obj.get("oid").and_then(Value::as_str) else {
+                continue;
+            };
             if !needed_oids.contains(oid) {
                 continue;
             }
-            raw_index.entry(oid.to_string()).or_default().push(select_notus_advisory_fields(
-                advisory_obj,
-                product_name.as_deref(),
-                package_type.as_deref(),
-                &advisory_path,
-            ));
+            raw_index
+                .entry(oid.to_string())
+                .or_default()
+                .push(select_notus_advisory_fields(
+                    advisory_obj,
+                    product_name.as_deref(),
+                    package_type.as_deref(),
+                    &advisory_path,
+                ));
         }
     }
 
@@ -320,10 +370,16 @@ fn select_notus_advisory_fields(
         )]),
     );
     if let Some(product_name) = product_name {
-        selected.insert("product_name".to_string(), Value::String(product_name.to_string()));
+        selected.insert(
+            "product_name".to_string(),
+            Value::String(product_name.to_string()),
+        );
     }
     if let Some(package_type) = package_type {
-        selected.insert("package_type".to_string(), Value::String(package_type.to_string()));
+        selected.insert(
+            "package_type".to_string(),
+            Value::String(package_type.to_string()),
+        );
     }
     for key in [
         "title",
@@ -383,7 +439,9 @@ fn merge_notus_entries(entries: Vec<Map<String, Value>>) -> Map<String, Value> {
             }
             match key.as_str() {
                 "source_files" => merge_unique_array(&mut merged, &key, &value),
-                "cves" | "xrefs" | "fixed_packages" => merge_unique_array(&mut merged, &key, &value),
+                "cves" | "xrefs" | "fixed_packages" => {
+                    merge_unique_array(&mut merged, &key, &value)
+                }
                 _ => {
                     merged.entry(key).or_insert(value);
                 }
@@ -413,10 +471,19 @@ fn notus_richness_score(entry: &Map<String, Value>) -> i32 {
 }
 
 fn merge_unique_array(target: &mut Map<String, Value>, key: &str, value: &Value) {
-    let Value::Array(items) = value else { return; };
-    let entry = target.entry(key.to_string()).or_insert_with(|| Value::Array(Vec::new()));
-    let Value::Array(current) = entry else { return; };
-    let mut seen = current.iter().map(normalized_json_key).collect::<HashSet<_>>();
+    let Value::Array(items) = value else {
+        return;
+    };
+    let entry = target
+        .entry(key.to_string())
+        .or_insert_with(|| Value::Array(Vec::new()));
+    let Value::Array(current) = entry else {
+        return;
+    };
+    let mut seen = current
+        .iter()
+        .map(normalized_json_key)
+        .collect::<HashSet<_>>();
     for item in items {
         let candidate = normalized_json_key(item);
         if seen.insert(candidate) {
@@ -439,8 +506,12 @@ fn is_empty_value(value: &Value) -> bool {
 fn extract_cve_ids_from_notus_metadata(entries: &[Value]) -> Vec<String> {
     let mut cves = BTreeSet::new();
     for entry in entries {
-        let Some(obj) = entry.as_object() else { continue; };
-        let Some(Value::Array(values)) = obj.get("cves") else { continue; };
+        let Some(obj) = entry.as_object() else {
+            continue;
+        };
+        let Some(Value::Array(values)) = obj.get("cves") else {
+            continue;
+        };
         for value in values {
             if let Some(cve) = value.as_str() {
                 let upper = cve.to_uppercase();
@@ -466,17 +537,26 @@ fn resolve_scap_data_paths(path: &Path) -> Result<Vec<PathBuf>> {
         .filter(|entry| entry.file_type().is_file())
         .map(|entry| entry.into_path())
         .filter(|candidate| {
-            matches!(candidate.extension().and_then(|value| value.to_str()), Some("json") | Some("gz"))
+            matches!(
+                candidate.extension().and_then(|value| value.to_str()),
+                Some("json") | Some("gz")
+            )
         })
         .collect::<Vec<_>>();
     matches.sort();
     if matches.is_empty() {
-        return Err(anyhow!("Could not find SCAP JSON files under {}", path.display()));
+        return Err(anyhow!(
+            "Could not find SCAP JSON files under {}",
+            path.display()
+        ));
     }
     Ok(matches)
 }
 
-fn load_scap_cve_index(path: &Path, needed_cves: &BTreeSet<String>) -> Result<HashMap<String, Value>> {
+fn load_scap_cve_index(
+    path: &Path,
+    needed_cves: &BTreeSet<String>,
+) -> Result<HashMap<String, Value>> {
     let paths = resolve_scap_data_paths(path)?;
     let mut index = HashMap::new();
     for data_path in paths {
@@ -536,18 +616,11 @@ fn iter_cve_entries<F: FnMut(&Map<String, Value>)>(payload: &Value, callback: &m
 }
 
 fn select_scap_cve_fields(entry: &Map<String, Value>) -> Option<Map<String, Value>> {
-    let cve_body = entry
-        .get("cve")
-        .and_then(Value::as_object)
-        .unwrap_or(entry);
+    let cve_body = entry.get("cve").and_then(Value::as_object).unwrap_or(entry);
     let cve_id = entry
         .get("id")
         .and_then(Value::as_str)
-        .or_else(|| {
-            cve_body
-                .get("id")
-                .and_then(Value::as_str)
-        })
+        .or_else(|| cve_body.get("id").and_then(Value::as_str))
         .or_else(|| {
             cve_body
                 .get("CVE_data_meta")
@@ -563,10 +636,28 @@ fn select_scap_cve_fields(entry: &Map<String, Value>) -> Option<Map<String, Valu
 
     let mut selected = Map::new();
     selected.insert("id".to_string(), Value::String(cve_id));
-    copy_first_string(entry, cve_body, &["published", "publishedDate"], &mut selected, "published");
-    copy_first_string(entry, cve_body, &["lastModified", "lastModifiedDate"], &mut selected, "last_modified");
+    copy_first_string(
+        entry,
+        cve_body,
+        &["published", "publishedDate"],
+        &mut selected,
+        "published",
+    );
+    copy_first_string(
+        entry,
+        cve_body,
+        &["lastModified", "lastModifiedDate"],
+        &mut selected,
+        "last_modified",
+    );
     copy_first_string(entry, cve_body, &["vulnStatus"], &mut selected, "status");
-    copy_first_string(entry, cve_body, &["sourceIdentifier"], &mut selected, "source_identifier");
+    copy_first_string(
+        entry,
+        cve_body,
+        &["sourceIdentifier"],
+        &mut selected,
+        "source_identifier",
+    );
 
     if let Some(descriptions) = extract_english_values(cve_body.get("descriptions")).or_else(|| {
         cve_body
@@ -579,13 +670,19 @@ fn select_scap_cve_fields(entry: &Map<String, Value>) -> Option<Map<String, Valu
             Value::Array(descriptions.into_iter().map(Value::String).collect()),
         );
     }
-    if let Some(references) = extract_reference_urls(cve_body.get("references").or_else(|| entry.get("references"))) {
+    if let Some(references) = extract_reference_urls(
+        cve_body
+            .get("references")
+            .or_else(|| entry.get("references")),
+    ) {
         selected.insert(
             "references".to_string(),
             Value::Array(references.into_iter().map(Value::String).collect()),
         );
     }
-    if let Some(weaknesses) = extract_weaknesses(cve_body.get("weaknesses"), cve_body.get("problemtype")) {
+    if let Some(weaknesses) =
+        extract_weaknesses(cve_body.get("weaknesses"), cve_body.get("problemtype"))
+    {
         selected.insert(
             "weaknesses".to_string(),
             Value::Array(weaknesses.into_iter().map(Value::String).collect()),
@@ -594,7 +691,11 @@ fn select_scap_cve_fields(entry: &Map<String, Value>) -> Option<Map<String, Valu
     if let Some(metrics) = extract_cvss(cve_body.get("metrics"), entry.get("impact")) {
         selected.insert("metrics".to_string(), Value::Object(metrics));
     }
-    if let Some(cpes) = extract_affected_cpes(cve_body.get("configurations").or_else(|| entry.get("configurations"))) {
+    if let Some(cpes) = extract_affected_cpes(
+        cve_body
+            .get("configurations")
+            .or_else(|| entry.get("configurations")),
+    ) {
         selected.insert(
             "affected_cpes".to_string(),
             Value::Array(cpes.into_iter().map(Value::String).collect()),
@@ -611,7 +712,11 @@ fn copy_first_string(
     destination: &str,
 ) {
     for key in keys {
-        if let Some(value) = entry.get(*key).and_then(Value::as_str).or_else(|| cve_body.get(*key).and_then(Value::as_str)) {
+        if let Some(value) = entry
+            .get(*key)
+            .and_then(Value::as_str)
+            .or_else(|| cve_body.get(*key).and_then(Value::as_str))
+        {
             target.insert(destination.to_string(), Value::String(value.to_string()));
             return;
         }
@@ -619,24 +724,38 @@ fn copy_first_string(
 }
 
 fn extract_english_values(value: Option<&Value>) -> Option<Vec<String>> {
-    let Value::Array(items) = value? else { return None; };
-    let mut selected = Vec::new();
+    let Value::Array(items) = value? else {
+        return None;
+    };
+    let mut english = Vec::new();
+    let mut fallback: Option<String> = None;
     for item in items {
-        let Some(obj) = item.as_object() else { continue; };
+        let Some(obj) = item.as_object() else {
+            continue;
+        };
         let text = obj
             .get("value")
             .and_then(Value::as_str)
             .or_else(|| obj.get("description").and_then(Value::as_str));
-        let Some(text) = text else { continue; };
+        let Some(text) = text else {
+            continue;
+        };
         let lang = obj
             .get("lang")
             .and_then(Value::as_str)
             .or_else(|| obj.get("language").and_then(Value::as_str));
-        if selected.is_empty() || matches!(lang, None | Some("en") | Some("eng")) {
-            selected.push(text.to_string());
+        if fallback.is_none() {
+            fallback = Some(text.to_string());
+        }
+        if matches!(lang, None | Some("en") | Some("eng")) {
+            english.push(text.to_string());
         }
     }
-    if selected.is_empty() { None } else { Some(selected) }
+    if !english.is_empty() {
+        Some(english)
+    } else {
+        fallback.map(|value| vec![value])
+    }
 }
 
 fn extract_reference_urls(value: Option<&Value>) -> Option<Vec<String>> {
@@ -644,10 +763,14 @@ fn extract_reference_urls(value: Option<&Value>) -> Option<Vec<String>> {
         Value::Object(obj) => obj.get("referenceData"),
         other => Some(other),
     }?;
-    let Value::Array(items) = refs_value else { return None; };
+    let Value::Array(items) = refs_value else {
+        return None;
+    };
     let mut refs = Vec::new();
     for item in items {
-        let Some(obj) = item.as_object() else { continue; };
+        let Some(obj) = item.as_object() else {
+            continue;
+        };
         let url = obj
             .get("url")
             .and_then(Value::as_str)
@@ -659,14 +782,23 @@ fn extract_reference_urls(value: Option<&Value>) -> Option<Vec<String>> {
             }
         }
     }
-    if refs.is_empty() { None } else { Some(refs) }
+    if refs.is_empty() {
+        None
+    } else {
+        Some(refs)
+    }
 }
 
-fn extract_weaknesses(weaknesses: Option<&Value>, problemtype: Option<&Value>) -> Option<Vec<String>> {
+fn extract_weaknesses(
+    weaknesses: Option<&Value>,
+    problemtype: Option<&Value>,
+) -> Option<Vec<String>> {
     let mut values = Vec::new();
     if let Some(Value::Array(items)) = weaknesses {
         for item in items {
-            let Some(obj) = item.as_object() else { continue; };
+            let Some(obj) = item.as_object() else {
+                continue;
+            };
             if let Some(Value::Array(descriptions)) = obj.get("description") {
                 for description in descriptions {
                     if let Some(value) = description.get("value").and_then(Value::as_str) {
@@ -681,7 +813,9 @@ fn extract_weaknesses(weaknesses: Option<&Value>, problemtype: Option<&Value>) -
     if let Some(Value::Object(problemtype_obj)) = problemtype {
         if let Some(Value::Array(items)) = problemtype_obj.get("problemtype_data") {
             for item in items {
-                let Some(obj) = item.as_object() else { continue; };
+                let Some(obj) = item.as_object() else {
+                    continue;
+                };
                 if let Some(Value::Array(descriptions)) = obj.get("description") {
                     for description in descriptions {
                         if let Some(value) = description.get("value").and_then(Value::as_str) {
@@ -694,7 +828,11 @@ fn extract_weaknesses(weaknesses: Option<&Value>, problemtype: Option<&Value>) -
             }
         }
     }
-    if values.is_empty() { None } else { Some(values) }
+    if values.is_empty() {
+        None
+    } else {
+        Some(values)
+    }
 }
 
 fn extract_cvss(metrics: Option<&Value>, impact: Option<&Value>) -> Option<Map<String, Value>> {
@@ -713,7 +851,11 @@ fn extract_cvss(metrics: Option<&Value>, impact: Option<&Value>) -> Option<Map<S
             }
         }
     }
-    if selected.is_empty() { None } else { Some(selected) }
+    if selected.is_empty() {
+        None
+    } else {
+        Some(selected)
+    }
 }
 
 fn extract_affected_cpes(value: Option<&Value>) -> Option<Vec<String>> {
@@ -745,7 +887,11 @@ fn extract_affected_cpes(value: Option<&Value>) -> Option<Vec<String>> {
         }
     }
     visit(value?, &mut cpes);
-    if cpes.is_empty() { None } else { Some(cpes.into_iter().take(50).collect()) }
+    if cpes.is_empty() {
+        None
+    } else {
+        Some(cpes.into_iter().take(50).collect())
+    }
 }
 
 fn enrich_results(
@@ -863,5 +1009,3 @@ fn read_json(path: &Path) -> Result<Value> {
         Ok(serde_json::from_slice(&data)?)
     }
 }
-
-use std::io::Read;

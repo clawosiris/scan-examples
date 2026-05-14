@@ -295,18 +295,23 @@ def _iter_cve_entries(payload: Any):
 
 
 def _extract_english_values(values: Any) -> list[str]:
-    """Extract English or best-effort human-readable strings from value lists."""
+    """Extract English strings, or fall back to the first available description."""
     if not isinstance(values, list):
         return []
-    selected: list[str] = []
+    english: list[str] = []
+    fallback: str | None = None
     for value in values:
         if not isinstance(value, dict):
             continue
         lang = value.get("lang") or value.get("language")
         text = value.get("value") or value.get("description")
-        if isinstance(text, str) and (lang in (None, "en", "eng") or not selected):
-            selected.append(text)
-    return selected
+        if not isinstance(text, str):
+            continue
+        if fallback is None:
+            fallback = text
+        if lang in (None, "en", "eng"):
+            english.append(text)
+    return english or ([fallback] if fallback is not None else [])
 
 
 def _extract_reference_urls(references: Any) -> list[str]:
