@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from .client import OpenVASAPIError, OpenVASScannerClient
-from .feed import enrich_results
+from .enrichment import enrich_results
 
 ProgressCallback = Callable[[str], None]
 SCAN_COMPLETION_MODES = {"first-results", "scan-complete"}

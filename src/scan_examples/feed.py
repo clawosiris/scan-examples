@@ -13,6 +13,9 @@ CVE_ID_PATTERN = re.compile(r"^CVE-\d{4}-\d{4,}$", re.IGNORECASE)
 
 def resolve_vt_metadata_path(vt_path: str | Path) -> Path:
     base = Path(vt_path)
+    if base.is_file():
+        return base
+
     candidates = [
         base / VT_METADATA_FILENAME,
         base / "nasl" / VT_METADATA_FILENAME,
@@ -271,71 +274,21 @@ def load_scap_cve_index(scap_path: str | Path) -> tuple[list[Path], dict[str, di
 
 
 def select_vt_metadata_fields(entry: dict[str, Any]) -> dict[str, Any]:
-    selected: dict[str, Any] = {}
-    for key in (
-        "oid",
-        "name",
-        "filename",
-        "family",
-        "category",
-        "references",
-        "dependencies",
-        "required_ports",
-        "required_udp_ports",
-        "tag",
-    ):
-        if key in entry:
-            selected[key] = entry[key]
-    return selected
+    from .enrichment import select_vt_metadata_fields as _select_vt_metadata_fields
+
+    return _select_vt_metadata_fields(entry)
 
 
 def extract_cve_ids_from_vt_metadata(entry: dict[str, Any] | None) -> list[str]:
-    if not entry:
-        return []
-    cve_ids: list[str] = []
-    references = entry.get("references")
-    if isinstance(references, list):
-        for reference in references:
-            if not isinstance(reference, dict):
-                continue
-            ref_class = reference.get("class")
-            ref_id = reference.get("id")
-            if isinstance(ref_id, str) and ref_id.upper().startswith("CVE-") and (ref_class is None or str(ref_class).lower() == "cve"):
-                cve_ids.append(ref_id.upper())
-    return sorted(set(cve_ids))
+    from .enrichment import extract_cve_ids_from_vt_metadata as _extract_cve_ids
+
+    return _extract_cve_ids(entry)
 
 
 def extract_result_oid(result: dict[str, Any]) -> str | None:
-    oid = result.get("oid")
-    if isinstance(oid, str) and oid:
-        return oid
+    from .enrichment import extract_result_oid as _extract_result_oid
 
-    nvt = result.get("nvt")
-    if isinstance(nvt, dict):
-        nested_oid = nvt.get("oid")
-        if isinstance(nested_oid, str) and nested_oid:
-            return nested_oid
-
-    return None
-
-
-def _enriched_result(
-    result: dict[str, Any],
-    *,
-    vt_metadata_status: str,
-    vt_metadata: dict[str, Any] | None,
-    cve_ids: list[str] | None = None,
-    cve_metadata_status: str = "no_cves",
-    cve_metadata: list[dict[str, Any]] | None = None,
-) -> dict[str, Any]:
-    return {
-        **result,
-        "vt-metadata-status": vt_metadata_status,
-        "vt-metadata": vt_metadata,
-        "cve-ids": cve_ids or [],
-        "cve-metadata-status": cve_metadata_status,
-        "cve-metadata": cve_metadata or [],
-    }
+    return _extract_result_oid(result)
 
 
 def enrich_results(
@@ -343,62 +296,12 @@ def enrich_results(
     vt_index: dict[str, dict[str, Any]] | None,
     scap_cve_index: dict[str, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    enriched: list[dict[str, Any]] = []
-    for result in results:
-        oid = extract_result_oid(result)
-        if oid is None:
-            enriched.append(
-                _enriched_result(result, vt_metadata_status="missing_oid", vt_metadata=None)
-            )
-            continue
+    from .enrichment import enrich_results as _enrich_results
 
-        if vt_index is None:
-            enriched.append(
-                _enriched_result(
-                    result,
-                    vt_metadata_status="metadata_unavailable",
-                    vt_metadata=None,
-                )
-            )
-            continue
-
-        entry = vt_index.get(oid)
-        if entry is None:
-            enriched.append(
-                _enriched_result(result, vt_metadata_status="not_found", vt_metadata=None)
-            )
-            continue
-
-        cve_ids = extract_cve_ids_from_vt_metadata(entry)
-        cve_metadata = [scap_cve_index[cve_id] for cve_id in cve_ids if scap_cve_index and cve_id in scap_cve_index]
-        if not cve_ids:
-            cve_status = "no_cves"
-        elif scap_cve_index is None:
-            cve_status = "metadata_unavailable"
-        elif len(cve_metadata) == len(cve_ids):
-            cve_status = "matched"
-        elif cve_metadata:
-            cve_status = "partial"
-        else:
-            cve_status = "not_found"
-
-        enriched.append(
-            _enriched_result(
-                result,
-                vt_metadata_status="matched",
-                vt_metadata=select_vt_metadata_fields(entry),
-                cve_ids=cve_ids,
-                cve_metadata_status=cve_status,
-                cve_metadata=cve_metadata,
-            )
-        )
-    return enriched
-
-
-def _format_enriched_result_for_log(enriched_result: dict[str, Any]) -> dict[str, Any]:
-    return enriched_result
+    return _enrich_results(results, vt_index, scap_cve_index)
 
 
 def dump_pretty_enriched_results(enriched_results: list[dict[str, Any]]) -> str:
-    log_payload = [_format_enriched_result_for_log(result) for result in enriched_results]
-    return json.dumps(log_payload, indent=2, sort_keys=True)
+    from .enrichment import dump_pretty_enriched_results as _dump_pretty
+
+    return _dump_pretty(enriched_results)

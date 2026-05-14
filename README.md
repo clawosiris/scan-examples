@@ -55,7 +55,8 @@ Supported environment variables:
 
 ## CLI commands
 
-The Docker image and local package expose `openvas-example`.
+The Docker image and local package expose `openvas-example` for scanner lifecycle examples and
+`openvas-enrich-results` for standalone result enrichment.
 
 ### Convert a scan configuration
 
@@ -76,6 +77,42 @@ openvas-example start-scan <scan-id>
 openvas-example stop-scan <scan-id>
 openvas-example get-results <scan-id>
 openvas-example delete-scan <scan-id>
+```
+
+### Enrich scanner results offline
+
+Use `openvas-enrich-results` when you already have scanner output and local feed metadata. This is
+the same enrichment logic used by the e2e flow, exposed as a standalone command for post-processing
+saved scanner output.
+
+Required inputs:
+- `--results` — scanner results JSON, either a raw result array or an object containing a `results`
+  array
+- `--vt-metadata` — path to `vt-metadata.json` or a directory containing it
+
+Optional inputs:
+- `--scap-path` — Greenbone/NVD SCAP CVE JSON data for second-stage CVE enrichment
+- `--output` — output file; omit it to print enriched JSON to stdout
+
+```bash
+openvas-enrich-results \
+  --results scan-results.json \
+  --vt-metadata /feed/vulnerability-tests/vt-metadata.json \
+  --scap-path /feed/scap-data \
+  --output enriched-results.json
+```
+
+The Python API is available from `scan_examples.enrichment` for callers that want to embed the
+same logic directly:
+
+```python
+from scan_examples.enrichment import enrich_results_from_files
+
+enriched = enrich_results_from_files(
+    results_path="scan-results.json",
+    vt_metadata_path="/feed/vulnerability-tests/vt-metadata.json",
+    scap_path="/feed/scap-data",
+)
 ```
 
 ### Run the end-to-end flow

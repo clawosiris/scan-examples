@@ -122,6 +122,13 @@ The repository SHALL provide example code that expands scanner results with meta
 - **THEN** it continues with VT metadata enrichment instead of failing the whole command
 - **AND** emits a brief user-visible message that CVE enrichment was skipped.
 
+#### Scenario: Enrich existing scanner output offline
+- **GIVEN** a scanner output JSON file and a required `vt-metadata.json` file
+- **AND** optional SCAP/NVD CVE JSON data may be provided
+- **WHEN** the standalone enrichment CLI processes those files
+- **THEN** it writes enriched JSON to stdout or the requested output file
+- **AND** uses the same enrichment module as the end-to-end workflow.
+
 ### Requirement: End-to-end test coverage
 The repository SHALL include an end-to-end test that exercises the documented workflow against the Compose environment.
 

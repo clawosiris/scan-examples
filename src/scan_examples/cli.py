@@ -10,7 +10,8 @@ from typing import Any, Callable
 from .client import OpenVASScannerClient
 from .conversion import convert_scan_config, discover_feed_layout, load_custom_scan_config
 from .e2e import dump_result, run_lifecycle
-from .feed import dump_pretty_enriched_results, enrich_results, load_scap_cve_index, load_vt_metadata_index
+from .enrichment import dump_pretty_enriched_results, enrich_results
+from .feed import load_scap_cve_index, load_vt_metadata_index
 
 
 E2E_FALLBACK_TCP_PORTS = [21, 22, 80, 139, 445, 3306]
