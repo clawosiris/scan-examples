@@ -7,7 +7,13 @@ from scan_examples.enrichment import (
     enrich_results,
     extract_result_oid,
 )
-from scan_examples.feed import load_scap_cve_index, load_vt_metadata_index, resolve_vt_metadata_path
+from scan_examples.feed import (
+    load_notus_advisory_index,
+    load_scap_cve_index,
+    load_vt_metadata_index,
+    resolve_notus_advisory_paths,
+    resolve_vt_metadata_path,
+)
 
 
 def test_resolve_vt_metadata_path_supports_root_file(tmp_path):
@@ -42,6 +48,53 @@ def test_extract_result_oid_supports_nested_nvt_oid():
     assert extract_result_oid(result) == "1.3.6.1"
 
 
+def test_resolve_notus_advisory_paths_finds_recursive_notus_files(tmp_path):
+    advisories_dir = tmp_path / "advisories"
+    advisories_dir.mkdir()
+    first = advisories_dir / "alpha.notus"
+    second = advisories_dir / "nested" / "beta.notus"
+    second.parent.mkdir()
+    first.write_text("{}", encoding="utf-8")
+    second.write_text("{}", encoding="utf-8")
+
+    assert resolve_notus_advisory_paths(tmp_path) == [first, second]
+
+
+def test_load_notus_advisory_index_indexes_entries_by_oid(tmp_path):
+    advisories_dir = tmp_path / "advisories"
+    advisories_dir.mkdir()
+    advisory_path = advisories_dir / "example_os.notus"
+    advisory_path.write_text(
+        json.dumps(
+            {
+                "version": "1.0",
+                "package_type": "rpm",
+                "product_name": "Example OS",
+                "advisories": [
+                    {
+                        "oid": "1.2.3",
+                        "fixed_packages": [{"full_name": "pkg-1.2.3-1.x86_64"}],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    paths, notus_index = load_notus_advisory_index(tmp_path)
+
+    assert paths == [advisory_path]
+    assert notus_index["1.2.3"] == [
+        {
+            "oid": "1.2.3",
+            "product_name": "Example OS",
+            "package_type": "rpm",
+            "advisory_file": "example_os.notus",
+            "fixed_packages": [{"full_name": "pkg-1.2.3-1.x86_64"}],
+        }
+    ]
+
+
 def test_enrich_results_marks_missing_metadata_states():
     results = [
         {"id": 1, "oid": "1.2.3", "type": "alarm"},
@@ -62,12 +115,41 @@ def test_enrich_results_marks_missing_metadata_states():
 
     enriched = enrich_results(results, vt_index)
 
+    assert enriched[0]["feed-metadata-source"] == "vt"
     assert enriched[0]["vt-metadata-status"] == "matched"
     assert enriched[0]["vt-metadata"]["name"] == "Example VT"
+    assert enriched[0]["notus-metadata-status"] == "metadata_unavailable"
+    assert enriched[1]["feed-metadata-source"] is None
     assert enriched[1]["vt-metadata-status"] == "not_found"
     assert enriched[1]["vt-metadata"] is None
+    assert enriched[1]["notus-metadata-status"] == "metadata_unavailable"
     assert enriched[2]["vt-metadata-status"] == "missing_oid"
     assert enriched[2]["vt-metadata"] is None
+    assert enriched[2]["notus-metadata-status"] == "missing_oid"
+
+
+def test_enrich_results_uses_notus_advisories_when_vt_metadata_misses():
+    results = [{"id": 1, "oid": "9.9.9", "type": "alarm"}]
+    notus_index = {
+        "9.9.9": [
+            {
+                "oid": "9.9.9",
+                "product_name": "Example OS",
+                "package_type": "rpm",
+                "advisory_file": "example_os.notus",
+                "fixed_packages": [{"full_name": "pkg-2.0-1.x86_64"}],
+            }
+        ]
+    }
+
+    enriched = enrich_results(results, {}, None, notus_index)
+
+    assert enriched[0]["feed-metadata-source"] == "notus"
+    assert enriched[0]["vt-metadata-status"] == "not_found"
+    assert enriched[0]["notus-metadata-status"] == "matched"
+    assert enriched[0]["notus-metadata"][0]["product_name"] == "Example OS"
+    assert enriched[0]["cve-ids"] == []
+
 
 
 def test_enrich_results_preserves_raw_result_shape_and_adds_metadata_fields():
@@ -101,7 +183,9 @@ def test_enrich_results_preserves_raw_result_shape_and_adds_metadata_fields():
         enriched[0]["vt-metadata"]["name"]
         == "Ghostscript 9.50 < 9.55.0 Sandbox Escape Vulnerability - Linux"
     )
+    assert enriched[0]["feed-metadata-source"] == "vt"
     assert enriched[0]["vt-metadata-status"] == "matched"
+    assert enriched[0]["notus-metadata"] == []
 
 
 
@@ -112,8 +196,11 @@ def test_enrich_results_handles_unavailable_metadata_index():
         {
             "id": 1,
             "oid": "1.2.3",
+            "feed-metadata-source": None,
             "vt-metadata-status": "metadata_unavailable",
             "vt-metadata": None,
+            "notus-metadata-status": "metadata_unavailable",
+            "notus-metadata": [],
             "cve-ids": [],
             "cve-metadata-status": "no_cves",
             "cve-metadata": [],
@@ -201,6 +288,7 @@ def test_enrich_results_adds_cve_metadata_after_vt_oid_match():
 
     enriched = enrich_results(results, vt_index, cve_index)
 
+    assert enriched[0]["feed-metadata-source"] == "vt"
     assert enriched[0]["vt-metadata-status"] == "matched"
     assert enriched[0]["cve-ids"] == ["CVE-2026-0001"]
     assert enriched[0]["cve-metadata-status"] == "matched"
@@ -223,8 +311,11 @@ def test_dump_pretty_enriched_results_preserves_enriched_result_shape_for_logs()
         {
             "id": 1,
             "oid": "1.2.3",
+            "feed-metadata-source": "vt",
             "vt-metadata-status": "matched",
             "vt-metadata": {"name": "Example VT"},
+            "notus-metadata-status": "metadata_unavailable",
+            "notus-metadata": [],
             "cve-ids": ["CVE-2026-0001"],
             "cve-metadata-status": "matched",
             "cve-metadata": [{"id": "CVE-2026-0001", "descriptions": ["Example CVE"]}],
@@ -234,7 +325,9 @@ def test_dump_pretty_enriched_results_preserves_enriched_result_shape_for_logs()
 
     assert payload[0]["id"] == 1
     assert payload[0]["oid"] == "1.2.3"
+    assert payload[0]["feed-metadata-source"] == "vt"
     assert payload[0]["vt-metadata"] == {"name": "Example VT"}
+    assert payload[0]["notus-metadata"] == []
     assert payload[0]["cve-ids"] == ["CVE-2026-0001"]
     assert payload[0]["cve-metadata"] == [{"id": "CVE-2026-0001", "descriptions": ["Example CVE"]}]
     assert rendered.startswith("[")

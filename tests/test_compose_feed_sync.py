@@ -24,6 +24,7 @@ def test_compose_mounts_feed_sync_outputs_to_persistent_runtime_volumes():
     assert "data_objects_vol:/var/lib/gvm/data-objects/gvmd" in COMPOSE
     assert "data_objects_vol:/feed/data-objects:ro" in COMPOSE
     assert "vt_data_vol:/feed/vulnerability-tests:ro" in COMPOSE
+    assert "notus_data_vol:/var/lib/notus:ro" in COMPOSE
 
     assert "greenbone-feed-sync:\n        condition: service_completed_successfully" in COMPOSE
 
