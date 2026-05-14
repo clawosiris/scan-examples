@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """End-to-end scan lifecycle helpers used by the example CLI and tests."""
+
+from __future__ import annotations
 
 import json
 import time
