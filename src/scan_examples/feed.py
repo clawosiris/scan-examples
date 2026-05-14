@@ -1,7 +1,5 @@
 """Feed-loading utilities for VT metadata, Notus advisories, and SCAP CVE data."""
 
-from __future__ import annotations
-
 import gzip
 import json
 import re
@@ -67,7 +65,9 @@ def _normalize_vt_metadata_payload(payload: Any) -> list[dict[str, Any]]:
     raise ValueError("Unsupported VT metadata payload shape")
 
 
-def load_vt_metadata_index(vt_path: str | Path) -> tuple[Path, dict[str, dict[str, Any]]]:
+def load_vt_metadata_index(
+    vt_path: str | Path,
+) -> tuple[Path, dict[str, dict[str, Any]]]:
     """Load VT metadata and index it by OID for fast result lookups."""
     metadata_path = resolve_vt_metadata_path(vt_path)
     payload = json.loads(metadata_path.read_text(encoding="utf-8"))
@@ -151,7 +151,15 @@ def _merge_notus_entries(entries: list[dict[str, Any]]) -> dict[str, Any]:
     def score(entry: dict[str, Any]) -> tuple[int, int]:
         rich_fields = sum(
             1
-            for key in ("title", "advisory_id", "advisory_xref", "cves", "summary", "insight", "severity")
+            for key in (
+                "title",
+                "advisory_id",
+                "advisory_xref",
+                "cves",
+                "summary",
+                "insight",
+                "severity",
+            )
             if entry.get(key)
         )
         source_bonus = 1 if entry.get("notus_source_type") == "advisory" else 0
@@ -180,7 +188,9 @@ def _merge_notus_entries(entries: list[dict[str, Any]]) -> dict[str, Any]:
     return merged
 
 
-def load_notus_advisory_index(notus_path: str | Path) -> tuple[list[Path], dict[str, list[dict[str, Any]]]]:
+def load_notus_advisory_index(
+    notus_path: str | Path,
+) -> tuple[list[Path], dict[str, list[dict[str, Any]]]]:
     """Load Notus advisory files and index them by advisory OID.
 
     A single OID may appear in more than one OS advisory file, so the index maps
@@ -301,7 +311,9 @@ def _extract_english_values(values: Any) -> list[str]:
 
 def _extract_reference_urls(references: Any) -> list[str]:
     """Collect unique reference URLs from CVE metadata blocks."""
-    refs = references.get("referenceData") if isinstance(references, dict) else references
+    refs = (
+        references.get("referenceData") if isinstance(references, dict) else references
+    )
     if not isinstance(refs, list):
         return []
     urls: list[str] = []
@@ -349,14 +361,25 @@ def _extract_cvss(metrics: Any, impact: Any = None) -> dict[str, Any]:
                 if isinstance(metric, dict):
                     selected[key] = {
                         name: metric[name]
-                        for name in ("source", "type", "baseSeverity", "exploitabilityScore", "impactScore")
+                        for name in (
+                            "source",
+                            "type",
+                            "baseSeverity",
+                            "exploitabilityScore",
+                            "impactScore",
+                        )
                         if name in metric
                     }
                     cvss_data = metric.get("cvssData")
                     if isinstance(cvss_data, dict):
                         selected[key]["cvssData"] = {
                             name: cvss_data[name]
-                            for name in ("version", "vectorString", "baseScore", "baseSeverity")
+                            for name in (
+                                "version",
+                                "vectorString",
+                                "baseScore",
+                                "baseSeverity",
+                            )
                             if name in cvss_data
                         }
     if isinstance(impact, dict):
@@ -391,7 +414,11 @@ def select_scap_cve_fields(entry: dict[str, Any]) -> dict[str, Any] | None:
     """Reduce a raw CVE record to the fields the example actually uses."""
     cve_id = entry.get("id")
     if not isinstance(cve_id, str):
-        meta = entry.get("cve", {}).get("CVE_data_meta") if isinstance(entry.get("cve"), dict) else entry.get("CVE_data_meta")
+        meta = (
+            entry.get("cve", {}).get("CVE_data_meta")
+            if isinstance(entry.get("cve"), dict)
+            else entry.get("CVE_data_meta")
+        )
         if isinstance(meta, dict):
             cve_id = meta.get("ID")
     if not isinstance(cve_id, str):
@@ -416,15 +443,21 @@ def select_scap_cve_fields(entry: dict[str, Any]) -> dict[str, Any] | None:
 
     descriptions = _extract_english_values(cve_body.get("descriptions"))
     if not descriptions and isinstance(cve_body.get("description"), dict):
-        descriptions = _extract_english_values(cve_body["description"].get("description_data"))
+        descriptions = _extract_english_values(
+            cve_body["description"].get("description_data")
+        )
     if descriptions:
         selected["descriptions"] = descriptions
 
-    refs = _extract_reference_urls(cve_body.get("references") or entry.get("references"))
+    refs = _extract_reference_urls(
+        cve_body.get("references") or entry.get("references")
+    )
     if refs:
         selected["references"] = refs
 
-    weaknesses = _extract_weaknesses(cve_body.get("weaknesses"), cve_body.get("problemtype"))
+    weaknesses = _extract_weaknesses(
+        cve_body.get("weaknesses"), cve_body.get("problemtype")
+    )
     if weaknesses:
         selected["weaknesses"] = weaknesses
 
@@ -432,14 +465,18 @@ def select_scap_cve_fields(entry: dict[str, Any]) -> dict[str, Any] | None:
     if metrics:
         selected["metrics"] = metrics
 
-    cpes = _extract_affected_cpes(cve_body.get("configurations") or entry.get("configurations"))
+    cpes = _extract_affected_cpes(
+        cve_body.get("configurations") or entry.get("configurations")
+    )
     if cpes:
         selected["affected_cpes"] = cpes
 
     return selected
 
 
-def load_scap_cve_index(scap_path: str | Path) -> tuple[list[Path], dict[str, dict[str, Any]]]:
+def load_scap_cve_index(
+    scap_path: str | Path,
+) -> tuple[list[Path], dict[str, dict[str, Any]]]:
     """Load SCAP/NVD CVE data and index it by CVE id."""
     paths = resolve_scap_data_paths(scap_path)
     index: dict[str, dict[str, Any]] = {}

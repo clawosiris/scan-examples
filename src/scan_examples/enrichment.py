@@ -66,7 +66,9 @@ def extract_result_oid(result: dict[str, Any]) -> str | None:
     return None
 
 
-def extract_cve_ids_from_notus_metadata(entries: list[dict[str, Any]] | None) -> list[str]:
+def extract_cve_ids_from_notus_metadata(
+    entries: list[dict[str, Any]] | None,
+) -> list[str]:
     """Extract unique CVE identifiers from one or more Notus metadata entries."""
     if not entries:
         return []
@@ -81,7 +83,9 @@ def extract_cve_ids_from_notus_metadata(entries: list[dict[str, Any]] | None) ->
     return sorted(set(cve_ids))
 
 
-def _feed_metadata_source(vt_metadata: dict[str, Any] | None, notus_metadata: list[dict[str, Any]]) -> str | None:
+def _feed_metadata_source(
+    vt_metadata: dict[str, Any] | None, notus_metadata: list[dict[str, Any]]
+) -> str | None:
     """Describe which enrichment source(s) matched for a result."""
     if vt_metadata and notus_metadata:
         return "vt+notus"
@@ -141,7 +145,9 @@ def enrich_results(
             continue
 
         vt_entry = vt_index.get(oid) if vt_index is not None else None
-        notus_entries = list(notus_index.get(oid, [])) if notus_index is not None else []
+        notus_entries = (
+            list(notus_index.get(oid, [])) if notus_index is not None else []
+        )
 
         if vt_entry is None and vt_index is None:
             vt_status = "metadata_unavailable"
@@ -183,7 +189,9 @@ def enrich_results(
             _enriched_result(
                 result,
                 vt_metadata_status=vt_status,
-                vt_metadata=select_vt_metadata_fields(vt_entry) if vt_entry is not None else None,
+                vt_metadata=select_vt_metadata_fields(vt_entry)
+                if vt_entry is not None
+                else None,
                 notus_metadata_status=notus_status,
                 notus_metadata=notus_entries,
                 cve_ids=cve_ids,
@@ -201,7 +209,9 @@ def _format_enriched_result_for_log(enriched_result: dict[str, Any]) -> dict[str
 
 def dump_pretty_enriched_results(enriched_results: list[dict[str, Any]]) -> str:
     """Render enriched results as stable, human-readable JSON."""
-    log_payload = [_format_enriched_result_for_log(result) for result in enriched_results]
+    log_payload = [
+        _format_enriched_result_for_log(result) for result in enriched_results
+    ]
     return json.dumps(log_payload, indent=2, sort_keys=True)
 
 
@@ -213,7 +223,9 @@ def load_scan_results(results_path: str | Path) -> list[dict[str, Any]]:
     elif isinstance(payload, dict) and isinstance(payload.get("results"), list):
         results = payload["results"]
     else:
-        raise ValueError("Scanner results JSON must be a list or an object with a results list")
+        raise ValueError(
+            "Scanner results JSON must be a list or an object with a results list"
+        )
 
     if not all(isinstance(result, dict) for result in results):
         raise ValueError("Scanner results JSON must contain only result objects")

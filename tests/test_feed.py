@@ -28,10 +28,12 @@ def test_load_vt_metadata_index_indexes_entries_by_oid(tmp_path):
     metadata_path.mkdir()
     vt_metadata = metadata_path / "vt-metadata.json"
     vt_metadata.write_text(
-        json.dumps([
-            {"oid": "1.2.3", "name": "Example VT"},
-            {"oid": "4.5.6", "name": "Other VT"},
-        ]),
+        json.dumps(
+            [
+                {"oid": "1.2.3", "name": "Example VT"},
+                {"oid": "4.5.6", "name": "Other VT"},
+            ]
+        ),
         encoding="utf-8",
     )
 
@@ -155,11 +157,13 @@ def test_enrich_results_uses_notus_advisories_when_vt_metadata_misses():
     assert enriched[0]["feed-metadata-source"] == "notus"
     assert enriched[0]["vt-metadata-status"] == "not_found"
     assert enriched[0]["notus-metadata-status"] == "matched"
-    assert enriched[0]["notus-metadata"][0]["title"] == "Ubuntu: Security Advisory (USN-9999-1)"
+    assert (
+        enriched[0]["notus-metadata"][0]["title"]
+        == "Ubuntu: Security Advisory (USN-9999-1)"
+    )
     assert enriched[0]["notus-metadata"][0]["product_name"] == "Example OS"
     assert enriched[0]["cve-ids"] == ["CVE-2026-0009"]
     assert enriched[0]["cve-metadata-status"] == "metadata_unavailable"
-
 
 
 def test_enrich_results_preserves_raw_result_shape_and_adds_metadata_fields():
@@ -198,7 +202,6 @@ def test_enrich_results_preserves_raw_result_shape_and_adds_metadata_fields():
     assert enriched[0]["notus-metadata"] == []
 
 
-
 def test_enrich_results_handles_unavailable_metadata_index():
     enriched = enrich_results([{"id": 1, "oid": "1.2.3"}], None)
 
@@ -218,7 +221,9 @@ def test_enrich_results_handles_unavailable_metadata_index():
     ]
 
 
-def test_load_notus_advisory_index_merges_product_and_advisory_records_for_same_oid(tmp_path):
+def test_load_notus_advisory_index_merges_product_and_advisory_records_for_same_oid(
+    tmp_path,
+):
     products_dir = tmp_path / "products"
     advisories_dir = tmp_path / "advisories"
     products_dir.mkdir()
@@ -234,7 +239,11 @@ def test_load_notus_advisory_index_merges_product_and_advisory_records_for_same_
                     {
                         "oid": "1.2.3",
                         "fixed_packages": [
-                            {"name": "samba", "full_version": "1.2.3-1", "specifier": ">="}
+                            {
+                                "name": "samba",
+                                "full_version": "1.2.3-1",
+                                "specifier": ">=",
+                            }
                         ],
                     }
                 ],
@@ -276,44 +285,62 @@ def test_load_notus_advisory_index_merges_product_and_advisory_records_for_same_
     assert merged["notus_source_type"] == "advisory"
 
 
-
 def test_load_scap_cve_index_supports_nvd_2_payload(tmp_path):
     scap_path = tmp_path / "scap"
     scap_path.mkdir()
     (scap_path / "nvdcve-2.0-test.json").write_text(
-        json.dumps({
-            "vulnerabilities": [
-                {
-                    "cve": {
-                        "id": "CVE-2026-0001",
-                        "sourceIdentifier": "nvd@example",
-                        "published": "2026-01-01T00:00:00.000",
-                        "lastModified": "2026-01-02T00:00:00.000",
-                        "vulnStatus": "Analyzed",
-                        "descriptions": [{"lang": "en", "value": "Example CVE"}],
-                        "references": {"referenceData": [{"url": "https://example.test/advisory"}]},
-                        "weaknesses": [{"description": [{"lang": "en", "value": "CWE-79"}]}],
-                        "metrics": {
-                            "cvssMetricV31": [
+        json.dumps(
+            {
+                "vulnerabilities": [
+                    {
+                        "cve": {
+                            "id": "CVE-2026-0001",
+                            "sourceIdentifier": "nvd@example",
+                            "published": "2026-01-01T00:00:00.000",
+                            "lastModified": "2026-01-02T00:00:00.000",
+                            "vulnStatus": "Analyzed",
+                            "descriptions": [{"lang": "en", "value": "Example CVE"}],
+                            "references": {
+                                "referenceData": [
+                                    {"url": "https://example.test/advisory"}
+                                ]
+                            },
+                            "weaknesses": [
+                                {"description": [{"lang": "en", "value": "CWE-79"}]}
+                            ],
+                            "metrics": {
+                                "cvssMetricV31": [
+                                    {
+                                        "source": "nvd@example",
+                                        "type": "Primary",
+                                        "cvssData": {
+                                            "version": "3.1",
+                                            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+                                            "baseScore": 9.8,
+                                            "baseSeverity": "CRITICAL",
+                                        },
+                                    }
+                                ]
+                            },
+                            "configurations": [
                                 {
-                                    "source": "nvd@example",
-                                    "type": "Primary",
-                                    "cvssData": {
-                                        "version": "3.1",
-                                        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-                                        "baseScore": 9.8,
-                                        "baseSeverity": "CRITICAL",
-                                    },
+                                    "nodes": [
+                                        {
+                                            "cpeMatch": [
+                                                {
+                                                    "vulnerable": True,
+                                                    "criteria": "cpe:2.3:a:example:app:1.0:*:*:*:*:*:*:*",
+                                                }
+                                            ]
+                                        }
+                                    ]
                                 }
-                            ]
-                        },
-                        "configurations": [
-                            {"nodes": [{"cpeMatch": [{"vulnerable": True, "criteria": "cpe:2.3:a:example:app:1.0:*:*:*:*:*:*:*"}]}]}
-                        ],
+                            ],
+                        }
                     }
-                }
-            ]
-        }),
+                ]
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -331,10 +358,18 @@ def test_load_scap_cve_index_supports_nvd_2_payload(tmp_path):
 def test_load_scap_cve_index_normalizes_and_filters_cve_ids(tmp_path):
     scap_path = tmp_path / "scap.json"
     scap_path.write_text(
-        json.dumps([
-            {"id": "cve-2026-0002", "descriptions": [{"lang": "en", "value": "lowercase CVE"}]},
-            {"id": "NOT-A-CVE", "descriptions": [{"lang": "en", "value": "ignore me"}]},
-        ]),
+        json.dumps(
+            [
+                {
+                    "id": "cve-2026-0002",
+                    "descriptions": [{"lang": "en", "value": "lowercase CVE"}],
+                },
+                {
+                    "id": "NOT-A-CVE",
+                    "descriptions": [{"lang": "en", "value": "ignore me"}],
+                },
+            ]
+        ),
         encoding="utf-8",
     )
 
@@ -353,7 +388,9 @@ def test_enrich_results_adds_cve_metadata_after_vt_oid_match():
             "references": [{"class": "cve", "id": "CVE-2026-0001"}],
         }
     }
-    cve_index = {"CVE-2026-0001": {"id": "CVE-2026-0001", "descriptions": ["Example CVE"]}}
+    cve_index = {
+        "CVE-2026-0001": {"id": "CVE-2026-0001", "descriptions": ["Example CVE"]}
+    }
 
     enriched = enrich_results(results, vt_index, cve_index)
 
@@ -361,12 +398,19 @@ def test_enrich_results_adds_cve_metadata_after_vt_oid_match():
     assert enriched[0]["vt-metadata-status"] == "matched"
     assert enriched[0]["cve-ids"] == ["CVE-2026-0001"]
     assert enriched[0]["cve-metadata-status"] == "matched"
-    assert enriched[0]["cve-metadata"] == [{"id": "CVE-2026-0001", "descriptions": ["Example CVE"]}]
+    assert enriched[0]["cve-metadata"] == [
+        {"id": "CVE-2026-0001", "descriptions": ["Example CVE"]}
+    ]
 
 
 def test_enrich_results_reports_missing_cve_metadata():
     results = [{"id": 1, "oid": "1.2.3", "type": "alarm"}]
-    vt_index = {"1.2.3": {"oid": "1.2.3", "references": [{"class": "cve", "id": "CVE-2026-0002"}]}}
+    vt_index = {
+        "1.2.3": {
+            "oid": "1.2.3",
+            "references": [{"class": "cve", "id": "CVE-2026-0002"}],
+        }
+    }
 
     enriched = enrich_results(results, vt_index, {})
 
@@ -376,20 +420,24 @@ def test_enrich_results_reports_missing_cve_metadata():
 
 
 def test_dump_pretty_enriched_results_preserves_enriched_result_shape_for_logs():
-    rendered = dump_pretty_enriched_results([
-        {
-            "id": 1,
-            "oid": "1.2.3",
-            "feed-metadata-source": "vt",
-            "vt-metadata-status": "matched",
-            "vt-metadata": {"name": "Example VT"},
-            "notus-metadata-status": "metadata_unavailable",
-            "notus-metadata": [],
-            "cve-ids": ["CVE-2026-0001"],
-            "cve-metadata-status": "matched",
-            "cve-metadata": [{"id": "CVE-2026-0001", "descriptions": ["Example CVE"]}],
-        }
-    ])
+    rendered = dump_pretty_enriched_results(
+        [
+            {
+                "id": 1,
+                "oid": "1.2.3",
+                "feed-metadata-source": "vt",
+                "vt-metadata-status": "matched",
+                "vt-metadata": {"name": "Example VT"},
+                "notus-metadata-status": "metadata_unavailable",
+                "notus-metadata": [],
+                "cve-ids": ["CVE-2026-0001"],
+                "cve-metadata-status": "matched",
+                "cve-metadata": [
+                    {"id": "CVE-2026-0001", "descriptions": ["Example CVE"]}
+                ],
+            }
+        ]
+    )
     payload = json.loads(rendered)
 
     assert payload[0]["id"] == 1
@@ -398,5 +446,7 @@ def test_dump_pretty_enriched_results_preserves_enriched_result_shape_for_logs()
     assert payload[0]["vt-metadata"] == {"name": "Example VT"}
     assert payload[0]["notus-metadata"] == []
     assert payload[0]["cve-ids"] == ["CVE-2026-0001"]
-    assert payload[0]["cve-metadata"] == [{"id": "CVE-2026-0001", "descriptions": ["Example CVE"]}]
+    assert payload[0]["cve-metadata"] == [
+        {"id": "CVE-2026-0001", "descriptions": ["Example CVE"]}
+    ]
     assert rendered.startswith("[")

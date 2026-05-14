@@ -16,6 +16,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=8.2.0,<9",
+  "ruff>=0.11.0,<0.12",
 ]
 
 [project.scripts]
@@ -25,6 +26,10 @@ openvas-enrich-results = "scan_examples.enrichment:main"
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

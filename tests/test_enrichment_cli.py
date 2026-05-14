@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import json
 
 from scan_examples.enrichment import enrich_results_from_files, load_scan_results, main
@@ -22,25 +20,34 @@ def test_load_scan_results_accepts_scanner_result_payload(tmp_path):
     assert load_scan_results(results_path) == [{"id": 1, "oid": "1.2.3"}]
 
 
-def test_enrich_results_from_files_requires_vt_metadata_and_uses_optional_scap(tmp_path):
+def test_enrich_results_from_files_requires_vt_metadata_and_uses_optional_scap(
+    tmp_path,
+):
     results_path = tmp_path / "results.json"
     vt_metadata_path = tmp_path / "vt-metadata.json"
     scap_path = tmp_path / "scap.json"
     results_path.write_text(json.dumps([{"id": 1, "oid": "1.2.3"}]), encoding="utf-8")
     vt_metadata_path.write_text(
-        json.dumps([
-            {
-                "oid": "1.2.3",
-                "name": "Example VT",
-                "references": [{"class": "cve", "id": "CVE-2026-0001"}],
-            }
-        ]),
+        json.dumps(
+            [
+                {
+                    "oid": "1.2.3",
+                    "name": "Example VT",
+                    "references": [{"class": "cve", "id": "CVE-2026-0001"}],
+                }
+            ]
+        ),
         encoding="utf-8",
     )
     scap_path.write_text(
-        json.dumps([
-            {"id": "CVE-2026-0001", "descriptions": [{"lang": "en", "value": "Example CVE"}]}
-        ]),
+        json.dumps(
+            [
+                {
+                    "id": "CVE-2026-0001",
+                    "descriptions": [{"lang": "en", "value": "Example CVE"}],
+                }
+            ]
+        ),
         encoding="utf-8",
     )
 
@@ -92,7 +99,6 @@ def test_enrich_results_from_files_supports_notus_only_enrichment(tmp_path):
     assert enriched[0]["cve-ids"] == []
 
 
-
 def test_standalone_enrichment_cli_writes_json_output(tmp_path):
     results_path = tmp_path / "results.json"
     vt_metadata_path = tmp_path / "vt-metadata.json"
@@ -106,14 +112,19 @@ def test_standalone_enrichment_cli_writes_json_output(tmp_path):
         encoding="utf-8",
     )
 
-    assert main([
-        "--results",
-        str(results_path),
-        "--vt-metadata",
-        str(vt_metadata_path),
-        "--output",
-        str(output_path),
-    ]) == 0
+    assert (
+        main(
+            [
+                "--results",
+                str(results_path),
+                "--vt-metadata",
+                str(vt_metadata_path),
+                "--output",
+                str(output_path),
+            ]
+        )
+        == 0
+    )
 
     payload = json.loads(output_path.read_text(encoding="utf-8"))
     assert payload[0]["id"] == 1
