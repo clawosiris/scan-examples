@@ -22,11 +22,11 @@ The repository SHALL provide example code that expands scanner results with meta
 - **THEN** it prefers the richer advisory-style metadata
 - **AND** merges complementary fixed-package/product details from the product-scoped records.
 
-#### Scenario: Large result sets are processed without loading the full result set into memory
-- **GIVEN** a scan result file that may contain hundreds of thousands of result entries
+#### Scenario: Large result sets use selective feed-metadata lookup by OID
+- **GIVEN** a scan result file that may contain many result entries
 - **WHEN** the default enrichment path runs
-- **THEN** it uses a memory-conscious processing strategy that does not require loading the entire result set into memory at once
-- **AND** selectively loads only the metadata needed for the OIDs present in the result set.
+- **THEN** it selectively loads only the VT/Notus/SCAP metadata needed for the OIDs and CVEs present in the result set
+- **AND** it does not claim a fully streaming result-processing pipeline in the current implementation.
 
 ### Requirement: Scan lifecycle example coverage
 The Python example SHALL continue to cover the documented scan lifecycle operations for the scanner REST API while using the default enrichment engine under the hood.
