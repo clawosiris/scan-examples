@@ -156,6 +156,36 @@ def test_rust_engine_matches_python_reference_output_for_existing_raw_scan_resul
     assert rust_payload[2]["vt-metadata-status"] == "missing_oid"
 
 
+def test_rust_engine_matches_python_reference_output_for_wrapped_results_file(tmp_path):
+    rust_bin = _ensure_rust_enrichment_binary()
+    results_path = tmp_path / "wrapped-results.json"
+    vt_metadata_path = tmp_path / "vt-metadata.json"
+    results_path.write_text(
+        json.dumps({"scan_id": "scan-123", "results": [{"id": 1, "oid": "1.2.3"}]}),
+        encoding="utf-8",
+    )
+    vt_metadata_path.write_text(
+        json.dumps([{"oid": "1.2.3", "name": "Example VT"}]),
+        encoding="utf-8",
+    )
+
+    python_payload = enrich_results_from_files(
+        results_path=results_path,
+        vt_metadata_path=vt_metadata_path,
+        engine="python",
+    )
+    rust_payload = enrich_results_from_files(
+        results_path=results_path,
+        vt_metadata_path=vt_metadata_path,
+        engine="rust",
+        rust_bin=rust_bin,
+    )
+
+    assert rust_payload == python_payload
+    assert rust_payload[0]["vt-metadata"]["name"] == "Example VT"
+
+
+
 def test_run_rust_enrichment_forwards_stderr_without_corrupting_stdout(
     monkeypatch, tmp_path, capsys
 ):
@@ -188,6 +218,48 @@ def test_run_rust_enrichment_forwards_stderr_without_corrupting_stdout(
     assert payload == [{"id": 1, "feed-metadata-source": "vt"}]
     assert captured.out == ""
     assert captured.err == "warning from rust\n"
+
+
+def test_standalone_enrichment_cli_passthrough_uses_rust_binary(monkeypatch, tmp_path):
+    results_path = tmp_path / "results.json"
+    vt_metadata_path = tmp_path / "vt-metadata.json"
+    output_path = tmp_path / "enriched.json"
+    results_path.write_text(json.dumps([{"id": 1, "oid": "1.2.3"}]), encoding="utf-8")
+    vt_metadata_path.write_text(
+        json.dumps([{"oid": "1.2.3", "name": "Example VT"}]),
+        encoding="utf-8",
+    )
+
+    seen = {}
+
+    def fake_passthrough(**kwargs):
+        seen.update(kwargs)
+        output = Path(kwargs["output_path"])
+        output.write_text(json.dumps([{"id": 1, "feed-metadata-source": "vt"}]), encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr("scan_examples.enrichment._run_rust_enrichment_passthrough", fake_passthrough)
+
+    assert (
+        main(
+            [
+                "--results",
+                str(results_path),
+                "--vt-metadata",
+                str(vt_metadata_path),
+                "--engine",
+                "rust",
+                "--output",
+                str(output_path),
+            ]
+        )
+        == 0
+    )
+
+    assert seen["results_path"] == str(results_path)
+    assert seen["vt_metadata_path"] == str(vt_metadata_path)
+    assert Path(output_path).exists()
+
 
 
 def test_standalone_enrichment_cli_writes_json_output(tmp_path):

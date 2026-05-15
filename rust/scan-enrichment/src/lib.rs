@@ -1,11 +1,12 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs;
-use std::io::Read;
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use flate2::read::GzDecoder;
-use serde_json::{Map, Value};
+use serde::de::{DeserializeSeed, IgnoredAny, MapAccess, SeqAccess, Visitor};
+use serde_json::{Deserializer, Map, Value};
 use walkdir::WalkDir;
 
 const VT_METADATA_FILENAME: &str = "vt-metadata.json";
@@ -18,13 +19,27 @@ pub fn run_cli(
     scap_path: Option<&Path>,
     output_path: Option<&Path>,
 ) -> Result<()> {
-    let enriched =
-        enrich_results_from_files(results_path, vt_metadata_path, notus_path, scap_path)?;
-    let rendered = serde_json::to_string_pretty(&enriched)?;
     if let Some(path) = output_path {
-        fs::write(path, format!("{rendered}\n"))?;
+        let file = fs::File::create(path)
+            .with_context(|| format!("Failed to create {}", path.display()))?;
+        let writer = std::io::BufWriter::new(file);
+        enrich_results_from_files_to_writer(
+            results_path,
+            vt_metadata_path,
+            notus_path,
+            scap_path,
+            writer,
+        )?;
     } else {
-        println!("{rendered}");
+        let stdout = std::io::stdout();
+        let writer = std::io::BufWriter::new(stdout.lock());
+        enrich_results_from_files_to_writer(
+            results_path,
+            vt_metadata_path,
+            notus_path,
+            scap_path,
+            writer,
+        )?;
     }
     Ok(())
 }
@@ -46,23 +61,7 @@ pub fn enrich_results_from_files(
         Some(path) => Some(load_notus_advisory_index(path, &oids)?),
         None => None,
     };
-
-    let mut cve_ids = BTreeSet::new();
-    if let Some(index) = &vt_index {
-        for entry in index.values() {
-            for cve in extract_cve_ids_from_vt_metadata(entry) {
-                cve_ids.insert(cve);
-            }
-        }
-    }
-    if let Some(index) = &notus_index {
-        for entries in index.values() {
-            for cve in extract_cve_ids_from_notus_metadata(entries) {
-                cve_ids.insert(cve);
-            }
-        }
-    }
-
+    let cve_ids = collect_needed_cve_ids(vt_index.as_ref(), notus_index.as_ref());
     let scap_index = match scap_path {
         Some(path) if !cve_ids.is_empty() => Some(load_scap_cve_index(path, &cve_ids)?),
         Some(_) => Some(HashMap::new()),
@@ -77,38 +76,251 @@ pub fn enrich_results_from_files(
     ))
 }
 
-fn load_results(path: &Path) -> Result<Vec<Map<String, Value>>> {
-    let payload = read_json(path)?;
-    match payload {
-        Value::Array(items) => items.into_iter().map(as_object).collect::<Result<Vec<_>>>(),
-        Value::Object(mut obj) => {
-            let results = obj.remove("results").ok_or_else(|| {
-                anyhow!("Scanner results JSON must be a list or an object with a results list")
-            })?;
-            match results {
-                Value::Array(items) => items.into_iter().map(as_object).collect::<Result<Vec<_>>>(),
-                _ => Err(anyhow!(
-                    "Scanner results JSON must be a list or an object with a results list"
-                )),
-            }
+pub fn enrich_results_from_files_to_writer<W: Write>(
+    results_path: &Path,
+    vt_metadata_path: Option<&Path>,
+    notus_path: Option<&Path>,
+    scap_path: Option<&Path>,
+    mut writer: W,
+) -> Result<()> {
+    let oids = collect_oids_from_results_path(results_path)?;
+    let vt_index = match vt_metadata_path {
+        Some(path) => Some(load_vt_metadata_index(path, &oids)?),
+        None => None,
+    };
+    let notus_index = match notus_path {
+        Some(path) => Some(load_notus_advisory_index(path, &oids)?),
+        None => None,
+    };
+    let cve_ids = collect_needed_cve_ids(vt_index.as_ref(), notus_index.as_ref());
+    let scap_index = match scap_path {
+        Some(path) if !cve_ids.is_empty() => Some(load_scap_cve_index(path, &cve_ids)?),
+        Some(_) => Some(HashMap::new()),
+        None => None,
+    };
+
+    writer.write_all(b"[")?;
+    let mut first = true;
+    stream_results(results_path, |result| {
+        let enriched = enrich_one_result(
+            result,
+            vt_index.as_ref(),
+            notus_index.as_ref(),
+            scap_index.as_ref(),
+        );
+        if !first {
+            writer.write_all(b",\n")?;
+        } else {
+            first = false;
         }
-        _ => Err(anyhow!(
-            "Scanner results JSON must be a list or an object with a results list"
-        )),
+        serde_json::to_writer(&mut writer, &enriched)?;
+        Ok(())
+    })?;
+    if !first {
+        writer.write_all(b"\n")?;
     }
+    writer.write_all(b"]\n")?;
+    writer.flush()?;
+    Ok(())
 }
 
-fn as_object(value: Value) -> Result<Map<String, Value>> {
-    match value {
-        Value::Object(obj) => Ok(obj),
-        _ => Err(anyhow!(
-            "Scanner results JSON must contain only result objects"
-        )),
-    }
+fn load_results(path: &Path) -> Result<Vec<Map<String, Value>>> {
+    let mut results = Vec::new();
+    stream_results(path, |result| {
+        results.push(result);
+        Ok(())
+    })?;
+    Ok(results)
 }
 
 fn collect_oids(results: &[Map<String, Value>]) -> HashSet<String> {
     results.iter().filter_map(extract_result_oid).collect()
+}
+
+fn collect_oids_from_results_path(path: &Path) -> Result<HashSet<String>> {
+    let mut oids = HashSet::new();
+    stream_results(path, |result| {
+        if let Some(oid) = extract_result_oid(&result) {
+            oids.insert(oid);
+        }
+        Ok(())
+    })?;
+    Ok(oids)
+}
+
+fn collect_needed_cve_ids(
+    vt_index: Option<&HashMap<String, Value>>,
+    notus_index: Option<&HashMap<String, Vec<Value>>>,
+) -> BTreeSet<String> {
+    let mut cve_ids = BTreeSet::new();
+    if let Some(index) = vt_index {
+        for entry in index.values() {
+            for cve in extract_cve_ids_from_vt_metadata(entry) {
+                cve_ids.insert(cve);
+            }
+        }
+    }
+    if let Some(index) = notus_index {
+        for entries in index.values() {
+            for cve in extract_cve_ids_from_notus_metadata(entries) {
+                cve_ids.insert(cve);
+            }
+        }
+    }
+    cve_ids
+}
+
+fn stream_results<F>(path: &Path, mut callback: F) -> Result<()>
+where
+    F: FnMut(Map<String, Value>) -> Result<()>,
+{
+    let file =
+        fs::File::open(path).with_context(|| format!("Failed to read {}", path.display()))?;
+    let mut reader = BufReader::new(file);
+    let first = first_non_whitespace_byte(&mut reader)?
+        .ok_or_else(|| anyhow!("Scanner results JSON must not be empty"))?;
+    let mut deserializer = Deserializer::from_reader(reader);
+    match first {
+        b'[' => {
+            let seed = ResultArraySeed {
+                callback: &mut callback,
+            };
+            seed.deserialize(&mut deserializer)?;
+        }
+        b'{' => {
+            let seed = ResultsObjectSeed {
+                callback: &mut callback,
+            };
+            seed.deserialize(&mut deserializer)?;
+        }
+        _ => {
+            return Err(anyhow!(
+                "Scanner results JSON must be a list or an object with a results list"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn first_non_whitespace_byte<R: BufRead>(reader: &mut R) -> Result<Option<u8>> {
+    loop {
+        let buffer = reader.fill_buf()?;
+        if buffer.is_empty() {
+            return Ok(None);
+        }
+        let consumed = buffer
+            .iter()
+            .take_while(|byte| byte.is_ascii_whitespace())
+            .count();
+        if consumed < buffer.len() {
+            return Ok(Some(buffer[consumed]));
+        }
+        reader.consume(consumed);
+    }
+}
+
+struct ResultArraySeed<'a, F> {
+    callback: &'a mut F,
+}
+
+impl<'de, 'a, F> DeserializeSeed<'de> for ResultArraySeed<'a, F>
+where
+    F: FnMut(Map<String, Value>) -> Result<()>,
+{
+    type Value = ();
+
+    fn deserialize<D>(self, deserializer: D) -> std::result::Result<Self::Value, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_seq(ResultArrayVisitor {
+            callback: self.callback,
+        })
+    }
+}
+
+struct ResultArrayVisitor<'a, F> {
+    callback: &'a mut F,
+}
+
+impl<'de, 'a, F> Visitor<'de> for ResultArrayVisitor<'a, F>
+where
+    F: FnMut(Map<String, Value>) -> Result<()>,
+{
+    type Value = ();
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("a JSON array of scan result objects")
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> std::result::Result<Self::Value, A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        while let Some(item) = seq.next_element::<Map<String, Value>>()? {
+            (self.callback)(item).map_err(serde::de::Error::custom)?;
+        }
+        Ok(())
+    }
+}
+
+struct ResultsObjectSeed<'a, F> {
+    callback: &'a mut F,
+}
+
+impl<'de, 'a, F> DeserializeSeed<'de> for ResultsObjectSeed<'a, F>
+where
+    F: FnMut(Map<String, Value>) -> Result<()>,
+{
+    type Value = ();
+
+    fn deserialize<D>(self, deserializer: D) -> std::result::Result<Self::Value, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_map(ResultsObjectVisitor {
+            callback: self.callback,
+        })
+    }
+}
+
+struct ResultsObjectVisitor<'a, F> {
+    callback: &'a mut F,
+}
+
+impl<'de, 'a, F> Visitor<'de> for ResultsObjectVisitor<'a, F>
+where
+    F: FnMut(Map<String, Value>) -> Result<()>,
+{
+    type Value = ();
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("an object containing a results array")
+    }
+
+    fn visit_map<A>(self, mut map: A) -> std::result::Result<Self::Value, A::Error>
+    where
+        A: MapAccess<'de>,
+    {
+        let mut found_results = false;
+        while let Some(key) = map.next_key::<String>()? {
+            if key == "results" {
+                found_results = true;
+                let seed = ResultArraySeed {
+                    callback: self.callback,
+                };
+                map.next_value_seed(seed)?;
+            } else {
+                let _: IgnoredAny = map.next_value()?;
+            }
+        }
+        if !found_results {
+            return Err(serde::de::Error::custom(
+                "Scanner results JSON must be a list or an object with a results list",
+            ));
+        }
+        Ok(())
+    }
 }
 
 fn extract_result_oid(result: &Map<String, Value>) -> Option<String> {
