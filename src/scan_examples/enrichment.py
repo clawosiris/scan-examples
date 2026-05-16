@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 import os
 import shutil
@@ -223,7 +224,12 @@ def dump_pretty_enriched_results(enriched_results: list[dict[str, Any]]) -> str:
 
 def load_scan_results(results_path: str | Path) -> list[dict[str, Any]]:
     """Load scanner results from disk and normalize the top-level payload shape."""
-    payload = json.loads(Path(results_path).read_text(encoding="utf-8"))
+    path = Path(results_path)
+    if path.suffix == ".gz":
+        with gzip.open(path, "rt", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    else:
+        payload = json.loads(path.read_text(encoding="utf-8"))
     if isinstance(payload, list):
         results = payload
     elif isinstance(payload, dict) and isinstance(payload.get("results"), list):
@@ -290,6 +296,34 @@ def resolve_enrichment_engine(
     return selected
 
 
+def _rust_enrichment_command(
+    *,
+    results_path: str | Path,
+    vt_metadata_path: str | Path | None = None,
+    scap_path: str | Path | None = None,
+    notus_path: str | Path | None = None,
+    rust_bin: str | Path | None = None,
+    output_path: str | Path | None = None,
+) -> list[str]:
+    """Build the Rust enrichment CLI command line."""
+    binary = resolve_rust_enrichment_binary(rust_bin)
+    if binary is None:
+        raise FileNotFoundError(
+            "Rust enrichment engine requested but scan-enrich-results binary was not found"
+        )
+
+    command = [str(binary), "--results", str(results_path)]
+    if output_path is not None:
+        command.extend(["--output", str(output_path)])
+    if vt_metadata_path is not None:
+        command.extend(["--vt-metadata", str(vt_metadata_path)])
+    if notus_path is not None:
+        command.extend(["--notus-path", str(notus_path)])
+    if scap_path is not None:
+        command.extend(["--scap-path", str(scap_path)])
+    return command
+
+
 def _run_rust_enrichment(
     *,
     results_path: str | Path,
@@ -299,28 +333,16 @@ def _run_rust_enrichment(
     rust_bin: str | Path | None = None,
 ) -> list[dict[str, Any]]:
     """Invoke the Rust enrichment CLI and parse its JSON output."""
-    binary = resolve_rust_enrichment_binary(rust_bin)
-    if binary is None:
-        raise FileNotFoundError(
-            "Rust enrichment engine requested but scan-enrich-results binary was not found"
-        )
-
     with tempfile.TemporaryDirectory(prefix="scan-enrich-rust-") as tmpdir:
         output_path = Path(tmpdir) / "enriched.json"
-        command = [
-            str(binary),
-            "--results",
-            str(results_path),
-            "--output",
-            str(output_path),
-        ]
-        if vt_metadata_path is not None:
-            command.extend(["--vt-metadata", str(vt_metadata_path)])
-        if notus_path is not None:
-            command.extend(["--notus-path", str(notus_path)])
-        if scap_path is not None:
-            command.extend(["--scap-path", str(scap_path)])
-
+        command = _rust_enrichment_command(
+            results_path=results_path,
+            vt_metadata_path=vt_metadata_path,
+            scap_path=scap_path,
+            notus_path=notus_path,
+            rust_bin=rust_bin,
+            output_path=output_path,
+        )
         completed = subprocess.run(
             command,
             check=True,
@@ -336,6 +358,28 @@ def _run_rust_enrichment(
     ):
         raise ValueError("Rust enrichment output must be a JSON list of result objects")
     return payload
+
+
+def _run_rust_enrichment_passthrough(
+    *,
+    results_path: str | Path,
+    vt_metadata_path: str | Path | None = None,
+    scap_path: str | Path | None = None,
+    notus_path: str | Path | None = None,
+    rust_bin: str | Path | None = None,
+    output_path: str | Path | None = None,
+) -> int:
+    """Run the Rust CLI directly so large outputs do not round-trip through Python memory."""
+    command = _rust_enrichment_command(
+        results_path=results_path,
+        vt_metadata_path=vt_metadata_path,
+        scap_path=scap_path,
+        notus_path=notus_path,
+        rust_bin=rust_bin,
+        output_path=output_path,
+    )
+    subprocess.run(command, check=True)
+    return 0
 
 
 def enrich_results_python(
@@ -479,13 +523,23 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.vt_metadata is None and args.notus_path is None:
         parser.error("at least one of --vt-metadata or --notus-path is required")
-    enriched = enrich_results_from_files(
+
+    effective_engine = resolve_enrichment_engine(args.engine, rust_bin=args.rust_bin)
+    if effective_engine == "rust":
+        return _run_rust_enrichment_passthrough(
+            results_path=args.results,
+            vt_metadata_path=args.vt_metadata,
+            scap_path=args.scap_path,
+            notus_path=args.notus_path,
+            rust_bin=args.rust_bin,
+            output_path=args.output,
+        )
+
+    enriched = enrich_results_from_files_python(
         results_path=args.results,
         vt_metadata_path=args.vt_metadata,
         scap_path=args.scap_path,
         notus_path=args.notus_path,
-        engine=args.engine,
-        rust_bin=args.rust_bin,
     )
     rendered = json.dumps(enriched, indent=2, sort_keys=True)
     if args.output:

@@ -119,6 +119,8 @@ openvas-enrich-results \
 
 By default the CLI and e2e flow prefer the Rust enrichment binary when it is present. The current
 Python implementation stays available as an explicit `--engine python` reference/debug path.
+For the standalone offline enrichment CLI, the Python wrapper now passes large file-based jobs
+straight through to the Rust binary instead of loading the enriched payload back into Python memory.
 
 If you want to invoke the Rust binary directly, build it first and call `scan-enrich-results`:
 
@@ -159,7 +161,7 @@ This command:
 4. Polls according to the configured completion mode: quick checks stop after first findings; full checks wait for the scan status to reach `succeeded`
 5. Fetches results in JSON format
 6. Enriches each result with matching NASL VT metadata from `vt-metadata.json` and/or matching Notus advisory metadata from `.notus` files when available (Rust by default when bundled, Python optionally for reference/debugging)
-   - current implementation selectively loads feed metadata by OID/CVE, but it does not yet stream the full raw result set end-to-end
+   - the Rust CLI now performs a two-pass, streaming file-based enrichment path so large offline result sets do not need to be materialized in memory all at once
 7. Stops the scan after first findings in quick mode, or lets it finish naturally in full mode
 8. Deletes the scan
 
@@ -356,6 +358,24 @@ Build the Rust binary locally when you want to test the default Rust-backed path
 cargo build --release -p scan-enrichment
 ./target/release/scan-enrich-results --help
 ```
+
+Generate synthetic large-result fixtures and compare Python vs Rust enrichment performance:
+
+```bash
+python3 scripts/generate_synthetic_results.py \
+  --output generated/synthetic-scan-results-500k.json \
+  --vt-metadata-output generated/synthetic-vt-metadata.json
+
+python3 scripts/benchmark_enrichment.py \
+  --results generated/synthetic-scan-results-500k.json \
+  --vt-metadata generated/synthetic-vt-metadata.json \
+  --runs 3
+```
+
+The benchmark script builds the release Rust binary if needed, runs both engines against the same
+fixture, verifies semantic output parity by normalized JSON SHA-256 (and also reports byte-for-byte
+output parity separately), and writes a JSON report to
+`generated/enrichment-benchmark-report.json`.
 
 This keeps the project virtualenv in `.venv/` and avoids ad-hoc `pip install` drift.
 
