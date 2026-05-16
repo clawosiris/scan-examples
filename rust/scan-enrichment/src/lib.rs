@@ -1,3 +1,9 @@
+//! Enrichment helpers for OpenVAS scanner result payloads.
+//!
+//! The crate supports both the in-process library path used by Python bindings and the
+//! standalone CLI path used for large offline enrichment jobs. The CLI-focused path prefers
+//! streaming where possible so very large result sets do not have to be materialized twice.
+
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -9,9 +15,12 @@ use serde::de::{DeserializeSeed, IgnoredAny, MapAccess, SeqAccess, Visitor};
 use serde_json::{Deserializer, Map, Value};
 use walkdir::WalkDir;
 
+/// Default VT metadata filename used when the caller points at a feed directory.
 const VT_METADATA_FILENAME: &str = "vt-metadata.json";
+/// Prefix used when normalizing CVE identifiers from mixed metadata sources.
 const CVE_PREFIX: &str = "CVE-";
 
+/// Run the standalone enrichment flow and write JSON output to a file or stdout.
 pub fn run_cli(
     results_path: &Path,
     vt_metadata_path: Option<&Path>,
@@ -44,6 +53,7 @@ pub fn run_cli(
     Ok(())
 }
 
+/// Load scan results from disk, resolve the relevant metadata indexes, and return enriched JSON.
 pub fn enrich_results_from_files(
     results_path: &Path,
     vt_metadata_path: Option<&Path>,
@@ -76,6 +86,10 @@ pub fn enrich_results_from_files(
     ))
 }
 
+/// Stream scan results from disk, enrich each one, and write the output incrementally.
+///
+/// This avoids loading the fully enriched result set into memory, which matters for large
+/// offline benchmarking and export flows.
 pub fn enrich_results_from_files_to_writer<W: Write>(
     results_path: &Path,
     vt_metadata_path: Option<&Path>,
@@ -133,10 +147,12 @@ fn load_results(path: &Path) -> Result<Vec<Map<String, Value>>> {
     Ok(results)
 }
 
+/// Collect all OIDs present in an already-loaded result slice.
 fn collect_oids(results: &[Map<String, Value>]) -> HashSet<String> {
     results.iter().filter_map(extract_result_oid).collect()
 }
 
+/// Collect all OIDs referenced by a result file without keeping the full payload in memory.
 fn collect_oids_from_results_path(path: &Path) -> Result<HashSet<String>> {
     let mut oids = HashSet::new();
     stream_results(path, |result| {
@@ -148,6 +164,7 @@ fn collect_oids_from_results_path(path: &Path) -> Result<HashSet<String>> {
     Ok(oids)
 }
 
+/// Collect the CVE identifiers referenced by the selected VT and Notus metadata entries.
 fn collect_needed_cve_ids(
     vt_index: Option<&HashMap<String, Value>>,
     notus_index: Option<&HashMap<String, Vec<Value>>>,
@@ -170,6 +187,10 @@ fn collect_needed_cve_ids(
     cve_ids
 }
 
+/// Stream result objects from a raw `[...]` payload or a wrapped `{ "results": [...] }` object.
+///
+/// The callback-based shape lets callers perform a lightweight first pass for OID discovery and
+/// a second pass for enrichment/output without allocating an entire intermediate result vector.
 fn stream_results<F>(path: &Path, mut callback: F) -> Result<()>
 where
     F: FnMut(Map<String, Value>) -> Result<()>,
@@ -182,6 +203,8 @@ where
         } else {
             Box::new(BufReader::new(file))
         };
+    // Peek just far enough to decide whether the payload is a bare array or a wrapped object,
+    // then hand the same buffered reader to serde so parsing resumes from the correct position.
     let first = first_non_whitespace_byte(&mut reader)?
         .ok_or_else(|| anyhow!("Scanner results JSON must not be empty"))?;
     let mut deserializer = Deserializer::from_reader(reader);
@@ -207,6 +230,7 @@ where
     Ok(())
 }
 
+/// Return the first non-whitespace byte from a buffered reader without consuming it.
 fn first_non_whitespace_byte<R: BufRead>(reader: &mut R) -> Result<Option<u8>> {
     loop {
         let buffer = reader.fill_buf()?;
@@ -224,6 +248,7 @@ fn first_non_whitespace_byte<R: BufRead>(reader: &mut R) -> Result<Option<u8>> {
     }
 }
 
+/// Deserialize a top-level JSON array by invoking a callback for each result object.
 struct ResultArraySeed<'a, F> {
     callback: &'a mut F,
 }
@@ -244,6 +269,7 @@ where
     }
 }
 
+/// Visitor used for array-shaped result payloads.
 struct ResultArrayVisitor<'a, F> {
     callback: &'a mut F,
 }
@@ -269,6 +295,7 @@ where
     }
 }
 
+/// Deserialize an object-shaped payload and stream only its `results` array entries.
 struct ResultsObjectSeed<'a, F> {
     callback: &'a mut F,
 }
@@ -289,6 +316,7 @@ where
     }
 }
 
+/// Visitor used for wrapped payloads that contain a `results` array among other keys.
 struct ResultsObjectVisitor<'a, F> {
     callback: &'a mut F,
 }
@@ -314,6 +342,8 @@ where
                 let seed = ResultArraySeed {
                     callback: self.callback,
                 };
+                // Stream the nested array directly so wrapper metadata like `scan_id` can be
+                // ignored without buffering the entire object payload in memory.
                 map.next_value_seed(seed)?;
             } else {
                 let _: IgnoredAny = map.next_value()?;
@@ -328,6 +358,7 @@ where
     }
 }
 
+/// Extract and normalize the OID from a scan result object if present.
 fn extract_result_oid(result: &Map<String, Value>) -> Option<String> {
     if let Some(Value::String(oid)) = result.get("oid") {
         if !oid.is_empty() {
@@ -344,6 +375,7 @@ fn extract_result_oid(result: &Map<String, Value>) -> Option<String> {
     None
 }
 
+/// Resolve a VT metadata file path from either a direct file path or a feed directory.
 fn resolve_vt_metadata_path(path: &Path) -> Result<PathBuf> {
     if path.is_file() {
         return Ok(path.to_path_buf());
@@ -371,6 +403,7 @@ fn resolve_vt_metadata_path(path: &Path) -> Result<PathBuf> {
     })
 }
 
+/// Load only the VT metadata entries needed for the supplied OID set.
 fn load_vt_metadata_index(
     path: &Path,
     needed_oids: &HashSet<String>,
@@ -391,6 +424,7 @@ fn load_vt_metadata_index(
     Ok(index)
 }
 
+/// Normalize supported VT metadata payload shapes into a flat list of entries.
 fn normalize_vt_metadata_payload(payload: Value) -> Result<Vec<Value>> {
     match payload {
         Value::Array(items) => Ok(items),
@@ -406,6 +440,7 @@ fn normalize_vt_metadata_payload(payload: Value) -> Result<Vec<Value>> {
     }
 }
 
+/// Keep only the VT metadata fields that are useful in enriched output.
 fn select_vt_metadata_fields(entry: &Map<String, Value>) -> Value {
     let mut selected = Map::new();
     for key in [
@@ -427,6 +462,7 @@ fn select_vt_metadata_fields(entry: &Map<String, Value>) -> Value {
     Value::Object(selected)
 }
 
+/// Extract normalized CVE identifiers from a VT metadata entry.
 fn extract_cve_ids_from_vt_metadata(entry: &Value) -> Vec<String> {
     let mut cves = BTreeSet::new();
     let Some(obj) = entry.as_object() else {
@@ -458,6 +494,7 @@ fn extract_cve_ids_from_vt_metadata(entry: &Value) -> Vec<String> {
     cves.into_iter().collect()
 }
 
+/// Resolve one or more Notus advisory files from a directory or a single file path.
 fn resolve_notus_advisory_paths(path: &Path) -> Result<Vec<PathBuf>> {
     if path.is_file() {
         return Ok(vec![path.to_path_buf()]);
@@ -485,6 +522,7 @@ fn resolve_notus_advisory_paths(path: &Path) -> Result<Vec<PathBuf>> {
     Ok(matches)
 }
 
+/// Load advisory entries for the requested OIDs from Notus JSON files.
 fn load_notus_advisory_index(
     path: &Path,
     needed_oids: &HashSet<String>,
@@ -539,6 +577,7 @@ fn load_notus_advisory_index(
     Ok(merged)
 }
 
+/// Classify a Notus source file so merged output can preserve where entries came from.
 fn notus_source_type(path: &Path) -> &'static str {
     for part in path.iter() {
         if part == "advisories" {
@@ -551,6 +590,7 @@ fn notus_source_type(path: &Path) -> &'static str {
     "generic"
 }
 
+/// Project a Notus advisory entry into the subset of fields exposed in enriched output.
 fn select_notus_advisory_fields(
     advisory: &Map<String, Value>,
     product_name: Option<&str>,
@@ -643,8 +683,11 @@ fn select_notus_advisory_fields(
     selected
 }
 
+/// Merge multiple Notus entries for the same OID into one richer synthetic advisory document.
 fn merge_notus_entries(entries: Vec<Map<String, Value>>) -> Map<String, Value> {
     let mut entries = entries;
+    // Merge the richest advisory first so scalar fields prefer the most informative source,
+    // then append array-like data from less-rich entries without losing unique values.
     entries.sort_by_key(|entry| (notus_richness_score(entry), advisory_bonus(entry)));
     entries.reverse();
 
@@ -668,10 +711,12 @@ fn merge_notus_entries(entries: Vec<Map<String, Value>>) -> Map<String, Value> {
     merged
 }
 
+/// Prefer advisory-backed Notus entries when ranking merge candidates.
 fn advisory_bonus(entry: &Map<String, Value>) -> i32 {
     matches!(entry.get("notus_source_type"), Some(Value::String(kind)) if kind == "advisory") as i32
 }
 
+/// Score a Notus entry by how much useful data it contributes to merged output.
 fn notus_richness_score(entry: &Map<String, Value>) -> i32 {
     [
         "title",
@@ -687,6 +732,7 @@ fn notus_richness_score(entry: &Map<String, Value>) -> i32 {
     .count() as i32
 }
 
+/// Merge array values while preserving order and removing JSON-equivalent duplicates.
 fn merge_unique_array(target: &mut Map<String, Value>, key: &str, value: &Value) {
     let Value::Array(items) = value else {
         return;
@@ -709,10 +755,12 @@ fn merge_unique_array(target: &mut Map<String, Value>, key: &str, value: &Value)
     }
 }
 
+/// Generate a stable deduplication key for arbitrary JSON values.
 fn normalized_json_key(value: &Value) -> String {
     serde_json::to_string(value).unwrap_or_default()
 }
 
+/// Treat null, empty strings, empty arrays, and empty objects as absent values.
 fn is_empty_value(value: &Value) -> bool {
     matches!(value, Value::Null)
         || matches!(value, Value::String(s) if s.is_empty())
@@ -720,6 +768,7 @@ fn is_empty_value(value: &Value) -> bool {
         || matches!(value, Value::Object(map) if map.is_empty())
 }
 
+/// Extract normalized CVE identifiers from merged Notus metadata entries.
 fn extract_cve_ids_from_notus_metadata(entries: &[Value]) -> Vec<String> {
     let mut cves = BTreeSet::new();
     for entry in entries {
@@ -741,6 +790,7 @@ fn extract_cve_ids_from_notus_metadata(entries: &[Value]) -> Vec<String> {
     cves.into_iter().collect()
 }
 
+/// Resolve one or more SCAP data files from a directory or a single file path.
 fn resolve_scap_data_paths(path: &Path) -> Result<Vec<PathBuf>> {
     if path.is_file() {
         return Ok(vec![path.to_path_buf()]);
@@ -770,6 +820,7 @@ fn resolve_scap_data_paths(path: &Path) -> Result<Vec<PathBuf>> {
     Ok(matches)
 }
 
+/// Load only the SCAP CVE entries referenced by the selected VT/Notus metadata.
 fn load_scap_cve_index(
     path: &Path,
     needed_cves: &BTreeSet<String>,
@@ -791,6 +842,7 @@ fn load_scap_cve_index(
     Ok(index)
 }
 
+/// Iterate over supported SCAP payload layouts and invoke a callback for each CVE object.
 fn iter_cve_entries<F: FnMut(&Map<String, Value>)>(payload: &Value, callback: &mut F) {
     match payload {
         Value::Array(items) => {
@@ -805,6 +857,8 @@ fn iter_cve_entries<F: FnMut(&Map<String, Value>)>(payload: &Value, callback: &m
             }
         }
         Value::Object(obj) => {
+            // Different SCAP exports wrap CVE data under different top-level keys; handle the
+            // common cases explicitly before falling back to a small recursive search.
             if let Some(Value::Array(vulnerabilities)) = obj.get("vulnerabilities") {
                 for item in vulnerabilities {
                     if let Some(cve) = item.get("cve").and_then(Value::as_object) {
@@ -832,6 +886,7 @@ fn iter_cve_entries<F: FnMut(&Map<String, Value>)>(payload: &Value, callback: &m
     }
 }
 
+/// Project a SCAP CVE entry into the subset of fields exposed in enriched output.
 fn select_scap_cve_fields(entry: &Map<String, Value>) -> Option<Map<String, Value>> {
     let cve_body = entry.get("cve").and_then(Value::as_object).unwrap_or(entry);
     let cve_id = entry
@@ -921,6 +976,7 @@ fn select_scap_cve_fields(entry: &Map<String, Value>) -> Option<Map<String, Valu
     Some(selected)
 }
 
+/// Copy the first string value found under `source_key` into `selected[target_key]`.
 fn copy_first_string(
     entry: &Map<String, Value>,
     cve_body: &Map<String, Value>,
@@ -940,6 +996,7 @@ fn copy_first_string(
     }
 }
 
+/// Extract English-language text values from common SCAP language-tagged arrays.
 fn extract_english_values(value: Option<&Value>) -> Option<Vec<String>> {
     let Value::Array(items) = value? else {
         return None;
@@ -975,6 +1032,7 @@ fn extract_english_values(value: Option<&Value>) -> Option<Vec<String>> {
     }
 }
 
+/// Extract reference URLs from common SCAP reference payload shapes.
 fn extract_reference_urls(value: Option<&Value>) -> Option<Vec<String>> {
     let refs_value = match value? {
         Value::Object(obj) => obj.get("referenceData"),
@@ -1006,6 +1064,7 @@ fn extract_reference_urls(value: Option<&Value>) -> Option<Vec<String>> {
     }
 }
 
+/// Extract weakness identifiers or descriptions from SCAP weakness structures.
 fn extract_weaknesses(
     weaknesses: Option<&Value>,
     problemtype: Option<&Value>,
@@ -1052,9 +1111,12 @@ fn extract_weaknesses(
     }
 }
 
+/// Extract normalized CVSS details from SCAP metrics or legacy impact blocks.
 fn extract_cvss(metrics: Option<&Value>, impact: Option<&Value>) -> Option<Map<String, Value>> {
     let mut selected = Map::new();
     if let Some(Value::Object(metrics_obj)) = metrics {
+        // NVD-style payloads may include multiple CVSS versions at once; keep the structured
+        // blocks intact so downstream consumers can choose the representation they need.
         for key in ["cvssMetricV31", "cvssMetricV30", "cvssMetricV2"] {
             if let Some(value) = metrics_obj.get(key) {
                 selected.insert(key.to_string(), value.clone());
@@ -1075,34 +1137,9 @@ fn extract_cvss(metrics: Option<&Value>, impact: Option<&Value>) -> Option<Map<S
     }
 }
 
+/// Recursively collect affected CPE strings from nested SCAP configuration trees.
 fn extract_affected_cpes(value: Option<&Value>) -> Option<Vec<String>> {
     let mut cpes = Vec::new();
-    fn visit(value: &Value, cpes: &mut Vec<String>) {
-        match value {
-            Value::Object(obj) => {
-                if obj.get("vulnerable") == Some(&Value::Bool(true)) {
-                    if let Some(cpe) = obj
-                        .get("criteria")
-                        .and_then(Value::as_str)
-                        .or_else(|| obj.get("cpe23Uri").and_then(Value::as_str))
-                    {
-                        if !cpes.iter().any(|existing| existing == cpe) {
-                            cpes.push(cpe.to_string());
-                        }
-                    }
-                }
-                for nested in obj.values() {
-                    visit(nested, cpes);
-                }
-            }
-            Value::Array(items) => {
-                for item in items {
-                    visit(item, cpes);
-                }
-            }
-            _ => {}
-        }
-    }
     visit(value?, &mut cpes);
     if cpes.is_empty() {
         None
@@ -1111,6 +1148,37 @@ fn extract_affected_cpes(value: Option<&Value>) -> Option<Vec<String>> {
     }
 }
 
+/// Walk nested configuration trees and append any `cpe23Uri` strings encountered.
+fn visit(value: &Value, cpes: &mut Vec<String>) {
+    match value {
+        Value::Object(obj) => {
+            if obj.get("vulnerable") == Some(&Value::Bool(true)) {
+                if let Some(cpe) = obj
+                    .get("criteria")
+                    .and_then(Value::as_str)
+                    .or_else(|| obj.get("cpe23Uri").and_then(Value::as_str))
+                {
+                    if !cpes.iter().any(|existing| existing == cpe) {
+                        cpes.push(cpe.to_string());
+                    }
+                }
+            }
+            // Nodes and children may be nested several levels deep, so recurse through every
+            // object value instead of assuming a fixed SCAP schema depth.
+            for nested in obj.values() {
+                visit(nested, cpes);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                visit(item, cpes);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Enrich a list of already-loaded result objects using the provided metadata indexes.
 fn enrich_results(
     results: Vec<Map<String, Value>>,
     vt_index: Option<&HashMap<String, Value>>,
@@ -1123,6 +1191,7 @@ fn enrich_results(
         .collect()
 }
 
+/// Enrich a single result object with VT, Notus, and optional SCAP metadata.
 fn enrich_one_result(
     mut result: Map<String, Value>,
     vt_index: Option<&HashMap<String, Value>>,
@@ -1215,6 +1284,7 @@ fn enrich_one_result(
     Value::Object(result)
 }
 
+/// Read JSON from plain text or gzip-compressed files.
 fn read_json(path: &Path) -> Result<Value> {
     let data = fs::read(path).with_context(|| format!("Failed to read {}", path.display()))?;
     if path.extension().and_then(|value| value.to_str()) == Some("gz") {
