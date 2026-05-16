@@ -373,7 +373,8 @@ python3 scripts/benchmark_enrichment.py \
 ```
 
 The benchmark script builds the release Rust binary if needed, runs both engines against the same
-fixture, verifies output parity by SHA-256, and writes a JSON report to
+fixture, verifies semantic output parity by normalized JSON SHA-256 (and also reports byte-for-byte
+output parity separately), and writes a JSON report to
 `generated/enrichment-benchmark-report.json`.
 
 This keeps the project virtualenv in `.venv/` and avoids ad-hoc `pip install` drift.

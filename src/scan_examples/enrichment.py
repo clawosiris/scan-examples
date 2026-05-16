@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 import os
 import shutil
@@ -223,7 +224,12 @@ def dump_pretty_enriched_results(enriched_results: list[dict[str, Any]]) -> str:
 
 def load_scan_results(results_path: str | Path) -> list[dict[str, Any]]:
     """Load scanner results from disk and normalize the top-level payload shape."""
-    payload = json.loads(Path(results_path).read_text(encoding="utf-8"))
+    path = Path(results_path)
+    if path.suffix == ".gz":
+        with gzip.open(path, "rt", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    else:
+        payload = json.loads(path.read_text(encoding="utf-8"))
     if isinstance(payload, list):
         results = payload
     elif isinstance(payload, dict) and isinstance(payload.get("results"), list):

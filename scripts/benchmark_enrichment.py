@@ -58,7 +58,7 @@ def run_command(command: list[str], *, env: dict[str, str]) -> dict[str, Any]:
             "elapsed_seconds": elapsed,
             "output_path": str(output_path),
             "output_bytes": output_path.stat().st_size,
-            "output_sha256": sha256_file(output_path),
+            "byte_output_sha256": sha256_file(output_path),
             "semantic_output_sha256": semantic_sha256_file(output_path),
         }
     except Exception:
@@ -68,10 +68,10 @@ def run_command(command: list[str], *, env: dict[str, str]) -> dict[str, Any]:
 
 def summarize_runs(label: str, runs: list[dict[str, Any]]) -> dict[str, Any]:
     timings = [run["elapsed_seconds"] for run in runs]
-    output_hashes = {run["output_sha256"] for run in runs}
+    byte_hashes = {run["byte_output_sha256"] for run in runs}
     semantic_hashes = {run["semantic_output_sha256"] for run in runs}
     output_sizes = {run["output_bytes"] for run in runs}
-    if len(output_hashes) != 1 or len(semantic_hashes) != 1 or len(output_sizes) != 1:
+    if len(byte_hashes) != 1 or len(semantic_hashes) != 1 or len(output_sizes) != 1:
         raise ValueError(f"{label} runs did not produce stable output")
     return {
         "label": label,
@@ -80,7 +80,7 @@ def summarize_runs(label: str, runs: list[dict[str, Any]]) -> dict[str, Any]:
         "max_seconds": max(timings),
         "mean_seconds": statistics.mean(timings),
         "median_seconds": statistics.median(timings),
-        "output_sha256": next(iter(output_hashes)),
+        "byte_output_sha256": next(iter(byte_hashes)),
         "semantic_output_sha256": next(iter(semantic_hashes)),
         "output_bytes": next(iter(output_sizes)),
     }
@@ -141,7 +141,10 @@ def main() -> int:
     try:
         python_summary = summarize_runs("python", python_runs)
         rust_summary = summarize_runs("rust", rust_runs)
-        parity = python_summary["output_sha256"] == rust_summary["output_sha256"]
+        byte_for_byte_output_parity = (
+            python_summary["byte_output_sha256"]
+            == rust_summary["byte_output_sha256"]
+        )
         semantic_parity = (
             python_summary["semantic_output_sha256"]
             == rust_summary["semantic_output_sha256"]
@@ -153,7 +156,7 @@ def main() -> int:
             "warmups": args.warmups,
             "python": python_summary,
             "rust": rust_summary,
-            "output_parity": parity,
+            "byte_for_byte_output_parity": byte_for_byte_output_parity,
             "semantic_output_parity": semantic_parity,
             "speedup_vs_python": (
                 python_summary["mean_seconds"] / rust_summary["mean_seconds"]

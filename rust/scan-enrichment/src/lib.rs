@@ -176,7 +176,12 @@ where
 {
     let file =
         fs::File::open(path).with_context(|| format!("Failed to read {}", path.display()))?;
-    let mut reader = BufReader::new(file);
+    let mut reader: Box<dyn BufRead> =
+        if path.extension().and_then(|value| value.to_str()) == Some("gz") {
+            Box::new(BufReader::new(GzDecoder::new(file)))
+        } else {
+            Box::new(BufReader::new(file))
+        };
     let first = first_non_whitespace_byte(&mut reader)?
         .ok_or_else(|| anyhow!("Scanner results JSON must not be empty"))?;
     let mut deserializer = Deserializer::from_reader(reader);
