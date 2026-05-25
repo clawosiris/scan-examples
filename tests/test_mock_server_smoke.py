@@ -195,7 +195,12 @@ def test_mock_server_smoke_lifecycle(mock_server: str):
     assert result.findings_summary["total"] == 7
     assert result.stop_response is None
     assert result.final_status is not None
-    assert result.final_status["status"] in {"requested", "running", "stored", "succeeded"}
+    assert result.final_status["status"] in {
+        "requested",
+        "running",
+        "stored",
+        "succeeded",
+    }
 
 
 def test_cli_commands_work_against_mock_server(mock_server: str, tmp_path: Path):
