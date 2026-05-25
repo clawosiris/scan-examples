@@ -76,11 +76,20 @@ baseline mock scanner from
 lighter than the full Compose/OpenVAS stack and is intended as an early smoke check, not a
 replacement for the self-hosted e2e workflow.
 
-Local example:
+Local example against the published container image:
+
+```bash
+OPENVAS_MOCK_SCANNER_IMAGE=ghcr.io/clawosiris/openvas-mock-scanner:latest \
+  uv run pytest tests/test_mock_server_smoke.py
+```
+
+If you do not have a container runtime available, the smoke test still supports a
+local source checkout fallback:
 
 ```bash
 git clone https://github.com/clawosiris/openvas-mock-sanner tmp/openvas-mock-sanner
-OPENVAS_MOCK_SANNER_REPO=$PWD/tmp/openvas-mock-sanner uv run pytest tests/test_mock_server_smoke.py
+OPENVAS_MOCK_SANNER_REPO=$PWD/tmp/openvas-mock-sanner \
+  uv run pytest tests/test_mock_server_smoke.py
 ```
 
 ### Convert a scan configuration

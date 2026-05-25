@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
 import time
 from pathlib import Path
+from urllib.error import URLError
+from urllib.request import urlopen
 
 import pytest
 
@@ -28,41 +32,128 @@ def _wait_for_port(port: int, timeout_seconds: float = 10.0) -> None:
             if sock.connect_ex(("127.0.0.1", port)) == 0:
                 return
         time.sleep(0.1)
-    raise RuntimeError(f"mock server did not open port {port} within {timeout_seconds:.1f}s")
+    raise RuntimeError(
+        f"mock server did not open port {port} within {timeout_seconds:.1f}s"
+    )
+
+
+def _wait_for_health(base_url: str, timeout_seconds: float = 10.0) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    health_url = f"{base_url}/health/alive"
+    while time.monotonic() < deadline:
+        try:
+            with urlopen(health_url, timeout=1.0) as response:
+                payload = json.load(response)
+            if payload.get("status") == "ok":
+                return
+        except (OSError, URLError, ValueError):
+            pass
+        time.sleep(0.1)
+    raise RuntimeError(
+        f"mock server did not become healthy at {health_url} within "
+        f"{timeout_seconds:.1f}s"
+    )
+
+
+def _container_runtime() -> str | None:
+    for candidate in ("docker", "podman"):
+        if shutil.which(candidate):
+            return candidate
+    return None
+
+
+def _mock_server_env(port: int) -> dict[str, str]:
+    return {
+        "MOCK_SCENARIO": "success-basic",
+        "MOCK_RESULT_COUNT": "7",
+        "MOCK_HOST_COUNT": "3",
+        "MOCK_SEED": "scan-examples-smoke",
+        "LISTENING": f"0.0.0.0:{port}",
+        "MOCK_HOST": "0.0.0.0",
+        "MOCK_PORT": str(port),
+    }
 
 
 @pytest.fixture(scope="module")
-def mock_server_repo() -> Path:
+def mock_server_repo() -> Path | None:
     raw = os.environ.get("OPENVAS_MOCK_SANNER_REPO")
     if not raw:
-        pytest.skip("OPENVAS_MOCK_SANNER_REPO is not set")
+        return None
     repo = Path(raw).resolve()
-    if not repo.exists():
-        pytest.skip(f"OPENVAS_MOCK_SANNER_REPO does not exist: {repo}")
-    cargo_toml = repo / "implementations" / "baseline-rust" / "Cargo.toml"
-    if not cargo_toml.exists():
-        pytest.skip(f"baseline-rust implementation not found under {repo}")
+    module_entrypoint = repo / "openvas_mock_scanner" / "__main__.py"
+    if not module_entrypoint.exists():
+        pytest.skip(f"openvas_mock_scanner module not found under {repo}")
     return repo
 
 
+@pytest.fixture(scope="module")
+def mock_server_image() -> str | None:
+    return os.environ.get("OPENVAS_MOCK_SCANNER_IMAGE")
+
+
 @pytest.fixture
-def mock_server(mock_server_repo: Path):
+def mock_server(
+    mock_server_image: str | None,
+    mock_server_repo: Path | None,
+):
     port = _choose_free_port()
-    implementation_dir = mock_server_repo / "implementations" / "baseline-rust"
+    base_url = f"http://127.0.0.1:{port}"
+
+    if mock_server_image:
+        runtime = _container_runtime()
+        if runtime is None:
+            pytest.skip(
+                "OPENVAS_MOCK_SCANNER_IMAGE is set but neither docker nor podman is available"
+            )
+
+        env = _mock_server_env(80)
+        command = [
+            runtime,
+            "run",
+            "--rm",
+            "-d",
+            "-p",
+            f"{port}:80",
+        ]
+        for key, value in env.items():
+            command.extend(["-e", f"{key}={value}"])
+        command.append(mock_server_image)
+
+        container = subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        container_id = container.stdout.strip()
+        if not container_id:
+            raise AssertionError(f"{runtime} run did not return a container id")
+
+        try:
+            _wait_for_port(port)
+            _wait_for_health(base_url)
+            yield base_url
+        finally:
+            with contextlib.suppress(subprocess.CalledProcessError):
+                subprocess.run(
+                    [runtime, "rm", "-f", container_id],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+        return
+
+    if mock_server_repo is None:
+        pytest.skip(
+            "Set OPENVAS_MOCK_SCANNER_IMAGE for the published container smoke path "
+            "or OPENVAS_MOCK_SANNER_REPO for a local source checkout"
+        )
+
     env = os.environ.copy()
-    env.update(
-        {
-            "PORT": str(port),
-            "MOCK_RESULT_COUNT": "7",
-            "MOCK_FINDINGS_DELAY_POLLS": "2",
-            "MOCK_SCAN_COMPLETE_POLLS": "3",
-            "MOCK_HOST_COUNT": "3",
-            "MOCK_SEED": "scan-examples-smoke",
-        }
-    )
+    env.update(_mock_server_env(port))
     process = subprocess.Popen(
-        ["cargo", "run", "--quiet"],
-        cwd=implementation_dir,
+        [sys.executable, "-m", "openvas_mock_scanner"],
+        cwd=mock_server_repo,
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -70,7 +161,8 @@ def mock_server(mock_server_repo: Path):
     )
     try:
         _wait_for_port(port)
-        yield f"http://127.0.0.1:{port}"
+        _wait_for_health(base_url)
+        yield base_url
     finally:
         process.terminate()
         try:
@@ -101,8 +193,9 @@ def test_mock_server_smoke_lifecycle(mock_server: str):
 
     assert result.scan_id
     assert result.findings_summary["total"] == 7
-    assert result.stop_response["status"] == "stopped"
-    assert result.final_status["status"] == "running"
+    assert result.stop_response is None
+    assert result.final_status is not None
+    assert result.final_status["status"] in {"requested", "running", "stored", "succeeded"}
 
 
 def test_cli_commands_work_against_mock_server(mock_server: str, tmp_path: Path):
@@ -150,11 +243,11 @@ def test_cli_commands_work_against_mock_server(mock_server: str, tmp_path: Path)
             "-m",
             "scan_examples.cli",
             "get-results",
+            "--enrichment-engine",
+            "python",
             scan_id,
             "--base-url",
             mock_server,
-            "--vt-path",
-            str(tmp_path),
         ],
         check=True,
         capture_output=True,
@@ -162,8 +255,8 @@ def test_cli_commands_work_against_mock_server(mock_server: str, tmp_path: Path)
     )
     results_payload = json.loads(results.stdout)
     assert results_payload["scan_id"] == scan_id
-    assert results_payload["results"] == []
-    assert results_payload["enriched_results"] == []
+    assert len(results_payload["results"]) == 7
+    assert len(results_payload["enriched_results"]) == 7
 
     delete = subprocess.run(
         [
