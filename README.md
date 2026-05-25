@@ -68,6 +68,21 @@ Supported environment variables:
 The Docker image and local package expose `openvas-example` for scanner lifecycle examples and
 `openvas-enrich-results` for standalone result enrichment.
 
+## Quick commit smoke test with `openvas-mock-sanner`
+
+For fast commit-time coverage, this repo can exercise its real HTTP client and CLI against the
+baseline mock scanner from
+[`clawosiris/openvas-mock-sanner`](https://github.com/clawosiris/openvas-mock-sanner). This is much
+lighter than the full Compose/OpenVAS stack and is intended as an early smoke check, not a
+replacement for the self-hosted e2e workflow.
+
+Local example:
+
+```bash
+git clone https://github.com/clawosiris/openvas-mock-sanner tmp/openvas-mock-sanner
+OPENVAS_MOCK_SANNER_REPO=$PWD/tmp/openvas-mock-sanner uv run pytest tests/test_mock_server_smoke.py
+```
+
 ### Convert a scan configuration
 
 ```bash

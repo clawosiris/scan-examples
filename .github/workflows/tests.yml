@@ -49,8 +49,35 @@ jobs:
       - name: Build Rust enrichment package
         run: cargo build --locked -p scan-enrichment
 
-  e2e:
+  mock-smoke:
     needs: unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out openvas-mock-sanner
+        uses: actions/checkout@v4
+        with:
+          repository: clawosiris/openvas-mock-sanner
+          path: tmp/openvas-mock-sanner
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.11'
+          enable-cache: true
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            tmp/openvas-mock-sanner/implementations/baseline-rust -> target
+      - name: Sync package + test deps
+        run: uv sync --locked --extra dev
+      - name: Run mock-server smoke tests
+        env:
+          OPENVAS_MOCK_SANNER_REPO: ${{ github.workspace }}/tmp/openvas-mock-sanner
+        run: uv run pytest tests/test_mock_server_smoke.py
+
+  e2e:
+    needs: [unit, mock-smoke]
     runs-on: [self-hosted, Linux, X64, hetzner-vps-scan-examples, scan-examples-e2e]
     timeout-minutes: 90
     steps:
