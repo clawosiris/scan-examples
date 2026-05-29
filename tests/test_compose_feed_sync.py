@@ -47,7 +47,7 @@ def test_ci_runs_feed_sync_before_scanner_stack_and_keeps_feed_volumes():
     assert "configure-openvas" in WORKFLOW
     assert "openvasd" in WORKFLOW
     assert "target" in WORKFLOW
-    assert "services:\n  openvasd:\n    ports: []" in CI_COMPOSE
+    assert "services:\n  openvasd:\n    ports: !override []" in CI_COMPOSE
     assert "scan-examples_vt_data_vol" not in WORKFLOW
     assert "scan-examples_notus_data_vol" not in WORKFLOW
     assert "scan-examples_data_objects_vol" not in WORKFLOW
