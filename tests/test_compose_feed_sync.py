@@ -34,8 +34,14 @@ def test_compose_mounts_feed_sync_outputs_to_persistent_runtime_volumes():
 
 
 def test_ci_runs_feed_sync_before_scanner_stack_and_keeps_feed_volumes():
-    assert "docker compose -f docker-compose.yml -f docker-compose.ci.yml up greenbone-feed-sync" in WORKFLOW
-    assert "docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d" in WORKFLOW
+    assert (
+        "docker compose -f docker-compose.yml -f docker-compose.ci.yml up greenbone-feed-sync"
+        in WORKFLOW
+    )
+    assert (
+        "docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d"
+        in WORKFLOW
+    )
     assert "gpg-data" in WORKFLOW
     assert "redis-server" in WORKFLOW
     assert "configure-openvas" in WORKFLOW
