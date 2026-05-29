@@ -80,12 +80,12 @@ jobs:
       - name: Create artifact directory
         run: mkdir -p artifacts
       - name: Build fresh example service image
-        run: docker compose build --pull example
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml build --pull example
       - name: Synchronize Greenbone feed data
-        run: docker compose up greenbone-feed-sync
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up greenbone-feed-sync
       - name: Start scanner stack and target
         run: >-
-          docker compose up -d
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d
           gpg-data
           redis-server
           configure-openvas
@@ -114,7 +114,7 @@ jobs:
           echo "Using e2e completion mode: ${completion_mode}"
           echo "Using minimum first-results count: ${min_results}"
           echo "Using no-findings-increment timeout: ${no_findings_increment_timeout}s"
-          docker compose run --rm \
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml run --rm \
             -v "$PWD/artifacts:/artifacts" \
             -e SCAN_CONFIG_JSON=/app/scanconfigs/scanconfig-modified.json.zip \
             -e E2E_COMPLETION_MODE="${completion_mode}" \
@@ -127,7 +127,7 @@ jobs:
               --output /artifacts/scan-results.json
       - name: Collect compose logs
         if: always()
-        run: docker compose logs --no-color > artifacts/docker-compose.log
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --no-color > artifacts/docker-compose.log
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -137,7 +137,7 @@ jobs:
       - name: Tear down stack but keep feed volumes cached
         if: always()
         run: |
-          docker compose down --remove-orphans
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml down --remove-orphans
           docker volume rm -f \
             scan-examples_redis_socket_vol \
             scan-examples_openvas_data_vol \
