@@ -2,6 +2,7 @@ from pathlib import Path
 
 
 COMPOSE = Path("docker-compose.yml").read_text(encoding="utf-8")
+CI_COMPOSE = Path("docker-compose.ci.yml").read_text(encoding="utf-8")
 WORKFLOW = Path(".github/workflows/tests.yml").read_text(encoding="utf-8")
 README = Path("README.md").read_text(encoding="utf-8")
 
@@ -33,13 +34,14 @@ def test_compose_mounts_feed_sync_outputs_to_persistent_runtime_volumes():
 
 
 def test_ci_runs_feed_sync_before_scanner_stack_and_keeps_feed_volumes():
-    assert "docker compose up greenbone-feed-sync" in WORKFLOW
-    assert "docker compose up -d" in WORKFLOW
+    assert "docker compose -f docker-compose.yml -f docker-compose.ci.yml up greenbone-feed-sync" in WORKFLOW
+    assert "docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d" in WORKFLOW
     assert "gpg-data" in WORKFLOW
     assert "redis-server" in WORKFLOW
     assert "configure-openvas" in WORKFLOW
     assert "openvasd" in WORKFLOW
     assert "target" in WORKFLOW
+    assert "services:\n  openvasd:\n    ports: []" in CI_COMPOSE
     assert "scan-examples_vt_data_vol" not in WORKFLOW
     assert "scan-examples_notus_data_vol" not in WORKFLOW
     assert "scan-examples_data_objects_vol" not in WORKFLOW
