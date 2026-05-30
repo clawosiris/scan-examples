@@ -21,6 +21,7 @@ dev = [
 [project.scripts]
 openvas-example = "scan_examples.cli:main"
 openvas-enrich-results = "scan_examples.enrichment:main"
+openvas-check-duplicate-oids = "scan_examples.duplicate_oids:main"
 
 [tool.pytest.ini_options]
 addopts = "-q"

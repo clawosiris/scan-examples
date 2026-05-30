@@ -45,10 +45,14 @@ def _normalize_vt_metadata_payload(payload: Any) -> list[dict[str, Any]]:
     raise ValueError("Unsupported VT metadata payload shape")
 
 
-def load_vt_metadata_index(vt_path: str | Path) -> tuple[Path, dict[str, dict[str, Any]]]:
+def load_vt_metadata_entries(vt_path: str | Path) -> tuple[Path, list[dict[str, Any]]]:
     metadata_path = resolve_vt_metadata_path(vt_path)
     payload = json.loads(metadata_path.read_text(encoding="utf-8"))
-    entries = _normalize_vt_metadata_payload(payload)
+    return metadata_path, _normalize_vt_metadata_payload(payload)
+
+
+def load_vt_metadata_index(vt_path: str | Path) -> tuple[Path, dict[str, dict[str, Any]]]:
+    metadata_path, entries = load_vt_metadata_entries(vt_path)
     index: dict[str, dict[str, Any]] = {}
     for entry in entries:
         oid = entry.get("oid")

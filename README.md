@@ -3,6 +3,10 @@
 Example code for using the OpenVAS scanner container REST API with Greenbone community scanner
 containers and feed data synchronized by `greenbone-feed-sync`.
 
+> [!WARNING]
+> This repository contains example code only. It is not officially supported by Greenbone and is
+> not intended for production use.
+
 ## License
 
 MIT. See `LICENSE`.
