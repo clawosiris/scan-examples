@@ -318,8 +318,7 @@ def test_mock_server_feed_backed_compatibility(mock_server: str):
     assert result.findings_summary["by_type"]["alarm"] > 0
     assert result.findings_summary["by_type"]["log"] > 0
     assert all(
-        enriched["feed-metadata-source"] == "vt"
-        for enriched in result.enriched_results
+        enriched["feed-metadata-source"] == "vt" for enriched in result.enriched_results
     )
     assert all(
         enriched["vt-metadata-status"] == "matched"
