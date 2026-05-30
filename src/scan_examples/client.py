@@ -95,13 +95,32 @@ class OpenVASScannerClient:
         """Fetch result items for a scan.
 
         Some endpoints return the results as a top-level array while others wrap
-        them in ``{"results": [...]}``, so we normalize both into a list.
+        them in ``{"results": [...]}``, so we normalize both into a list. When
+        the scanner exposes openvasd-style pagination metadata, fetch all pages.
         """
         data = self._request("GET", f"/scans/{scan_id}/results")
         if isinstance(data, list):
             return data
         if isinstance(data, dict) and isinstance(data.get("results"), list):
-            return data["results"]
+            results = list(data["results"])
+            next_offset = data.get("next_offset")
+            total = data.get("total")
+            limit = data.get("limit")
+            while isinstance(next_offset, int):
+                page = self._request(
+                    "GET",
+                    f"/scans/{scan_id}/results",
+                    params={"offset": next_offset, "limit": limit or 100},
+                )
+                if not (
+                    isinstance(page, dict) and isinstance(page.get("results"), list)
+                ):
+                    raise OpenVASAPIError(f"Unexpected paged results payload: {page!r}")
+                results.extend(page["results"])
+                next_offset = page.get("next_offset")
+                if isinstance(total, int) and len(results) >= total:
+                    break
+            return results
         raise OpenVASAPIError(f"Unexpected results payload: {data!r}")
 
     def delete_scan(self, scan_id: str) -> Any:

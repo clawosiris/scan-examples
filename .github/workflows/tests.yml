@@ -3,6 +3,8 @@ name: tests
 on:
   push:
     branches: [main, devel]
+    tags:
+      - 'v*'
   pull_request:
   workflow_dispatch:
     inputs:
@@ -53,7 +55,10 @@ jobs:
     needs: unit
     runs-on: ubuntu-latest
     env:
-      OPENVAS_MOCK_SCANNER_IMAGE: ghcr.io/clawosiris/openvas-mock-scanner:latest
+      # Pinned to the released mock artifact so fast scanner-facing CI does not
+      # drift with a moving :latest tag. Update this deliberately after reading
+      # the mock scanner release notes.
+      OPENVAS_MOCK_SCANNER_IMAGE: ghcr.io/clawosiris/openvas-mock-scanner:v0.2.1
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -69,6 +74,10 @@ jobs:
 
   e2e:
     needs: [unit, mock-smoke]
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main') ||
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))
     runs-on: [self-hosted, Linux, X64, hetzner-vps-scan-examples, scan-examples-e2e]
     timeout-minutes: 90
     steps:

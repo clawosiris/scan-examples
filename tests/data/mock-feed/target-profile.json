@@ -1,0 +1,67 @@
+{
+  "hosts": [
+    {
+      "host": "192.0.2.10",
+      "hostname": "metasploitable-web.example.test",
+      "os": {
+        "name": "Ubuntu Linux",
+        "version": "14.04",
+        "cpe": "cpe:/o:canonical:ubuntu_linux:14.04"
+      },
+      "services": [
+        {
+          "port": 22,
+          "protocol": "tcp",
+          "name": "ssh",
+          "product": "OpenSSH",
+          "version": "6.6.1p1"
+        },
+        {
+          "port": 80,
+          "protocol": "tcp",
+          "name": "http",
+          "product": "Apache httpd",
+          "version": "2.4.49",
+          "cpe": "cpe:/a:apache:http_server:2.4.49"
+        },
+        {
+          "port": 443,
+          "protocol": "tcp",
+          "name": "https",
+          "product": "Apache httpd",
+          "version": "2.4.49",
+          "cpe": "cpe:/a:apache:http_server:2.4.49"
+        }
+      ],
+      "packages": [
+        {
+          "name": "ghostscript",
+          "version": "9.53.3",
+          "cpe": "cpe:/a:artifex:ghostscript:9.53.3"
+        },
+        {
+          "name": "openssl",
+          "version": "1.1.1f-1ubuntu2.10",
+          "cpe": "cpe:/a:openssl:openssl:1.1.1f"
+        }
+      ],
+      "web_apps": [{"path": "/", "name": "example-app", "version": "1.0.0"}],
+      "auth": {"ssh": "success"}
+    },
+    {
+      "host": "192.0.2.11",
+      "hostname": "metasploitable-db.example.test",
+      "services": [
+        {
+          "port": 5432,
+          "protocol": "tcp",
+          "name": "postgresql",
+          "product": "PostgreSQL",
+          "version": "9.6"
+        }
+      ],
+      "packages": [{"name": "openssl", "version": "1.1.1f-1ubuntu2.10"}],
+      "auth": {}
+    }
+  ]
+}

@@ -16,6 +16,11 @@ import pytest
 
 from scan_examples.client import OpenVASScannerClient
 from scan_examples.e2e import run_lifecycle
+from scan_examples.feed import load_vt_metadata_index
+
+
+MOCK_FEED_FIXTURE_DIR = Path(__file__).parent / "data" / "mock-feed"
+MOCK_CONTAINER_FEED_DIR = "/mock-feed"
 
 
 def _choose_free_port() -> int:
@@ -62,16 +67,39 @@ def _container_runtime() -> str | None:
     return None
 
 
-def _mock_server_env(port: int) -> dict[str, str]:
-    return {
-        "MOCK_SCENARIO": "success-basic",
-        "MOCK_RESULT_COUNT": "7",
-        "MOCK_HOST_COUNT": "3",
+def _mock_server_env(
+    port: int,
+    *,
+    scenario: str = "success-basic",
+    result_count: int = 7,
+    host_count: int = 3,
+    page_size: int = 100,
+    seed: str = "scan-examples-smoke",
+    feed_fixture_dir: str | Path | None = None,
+) -> dict[str, str]:
+    env = {
+        "MOCK_SCENARIO": scenario,
+        "MOCK_RESULT_COUNT": str(result_count),
+        "MOCK_HOST_COUNT": str(host_count),
+        "MOCK_PAGE_SIZE": str(page_size),
         "MOCK_SEED": "scan-examples-smoke",
         "LISTENING": f"0.0.0.0:{port}",
         "MOCK_HOST": "0.0.0.0",
         "MOCK_PORT": str(port),
     }
+    env["MOCK_SEED"] = seed
+    if feed_fixture_dir is not None:
+        root = Path(feed_fixture_dir)
+        env.update(
+            {
+                "MOCK_VT_METADATA_PATH": str(root / "vt-metadata.json"),
+                "MOCK_TARGET_PROFILE": str(root / "target-profile.json"),
+                "MOCK_NOTUS_ADVISORIES_PATH": str(root / "notus-advisories.json"),
+                "MOCK_SCAP_METADATA_PATH": str(root / "scap-cves.json"),
+                "MOCK_FEED_STRICT": "true",
+            }
+        )
+    return env
 
 
 @pytest.fixture(scope="module")
@@ -93,11 +121,14 @@ def mock_server_image() -> str | None:
 
 @pytest.fixture
 def mock_server(
+    request: pytest.FixtureRequest,
     mock_server_image: str | None,
     mock_server_repo: Path | None,
 ):
+    options = getattr(request, "param", {}) or {}
     port = _choose_free_port()
     base_url = f"http://127.0.0.1:{port}"
+    feed_backed = bool(options.get("feed_backed"))
 
     if mock_server_image:
         runtime = _container_runtime()
@@ -106,7 +137,15 @@ def mock_server(
                 "OPENVAS_MOCK_SCANNER_IMAGE is set but neither docker nor podman is available"
             )
 
-        env = _mock_server_env(80)
+        env = _mock_server_env(
+            80,
+            scenario=options.get("scenario", "success-basic"),
+            result_count=options.get("result_count", 7),
+            host_count=options.get("host_count", 3),
+            page_size=options.get("page_size", 100),
+            seed=options.get("seed", "scan-examples-smoke"),
+            feed_fixture_dir=MOCK_CONTAINER_FEED_DIR if feed_backed else None,
+        )
         command = [
             runtime,
             "run",
@@ -115,6 +154,13 @@ def mock_server(
             "-p",
             f"{port}:80",
         ]
+        if feed_backed:
+            command.extend(
+                [
+                    "-v",
+                    f"{MOCK_FEED_FIXTURE_DIR}:{MOCK_CONTAINER_FEED_DIR}:ro",
+                ]
+            )
         for key, value in env.items():
             command.extend(["-e", f"{key}={value}"])
         command.append(mock_server_image)
@@ -150,7 +196,17 @@ def mock_server(
         )
 
     env = os.environ.copy()
-    env.update(_mock_server_env(port))
+    env.update(
+        _mock_server_env(
+            port,
+            scenario=options.get("scenario", "success-basic"),
+            result_count=options.get("result_count", 7),
+            host_count=options.get("host_count", 3),
+            page_size=options.get("page_size", 100),
+            seed=options.get("seed", "scan-examples-smoke"),
+            feed_fixture_dir=MOCK_FEED_FIXTURE_DIR if feed_backed else None,
+        )
+    )
     process = subprocess.Popen(
         [sys.executable, "-m", "openvas_mock_scanner"],
         cwd=mock_server_repo,
@@ -201,6 +257,74 @@ def test_mock_server_smoke_lifecycle(mock_server: str):
         "stored",
         "succeeded",
     }
+
+
+@pytest.mark.parametrize(
+    "mock_server",
+    [
+        {
+            "feed_backed": True,
+            "scenario": "success-large-report",
+            "result_count": 125,
+            "host_count": 2,
+            "page_size": 50,
+            "seed": "scan-examples-feed",
+        }
+    ],
+    indirect=True,
+)
+def test_mock_server_feed_backed_compatibility(mock_server: str):
+    _, vt_index = load_vt_metadata_index(MOCK_FEED_FIXTURE_DIR / "vt-metadata.json")
+    selected_oids = [
+        "1.3.6.1.4.1.25623.1.0.100034",
+        "1.3.6.1.4.1.25623.1.0.147696",
+        "1.3.6.1.4.1.25623.1.0.117812",
+        "1.3.6.1.4.1.25623.1.0.900001",
+    ]
+
+    with urlopen(f"{mock_server}/feed/diagnostics", timeout=1.0) as response:
+        diagnostics = json.load(response)
+    assert diagnostics["metadata_count"] == len(vt_index)
+    assert diagnostics["target_profile_hosts"] == 2
+    assert diagnostics["notus_advisories"] == 1
+    assert diagnostics["scap_cves"] == 2
+    assert diagnostics["diagnostics"] == []
+
+    with urlopen(f"{mock_server}/vts/{selected_oids[2]}", timeout=1.0) as response:
+        vt_metadata = json.load(response)
+    assert vt_metadata["name"].startswith("Apache HTTP Server")
+    assert "CVE-2021-41773" in vt_metadata["cves"]
+
+    client = OpenVASScannerClient(mock_server)
+    result = run_lifecycle(
+        client=client,
+        payload={
+            "scan_id": "scan-examples-feed",
+            "target": {"hosts": ["192.0.2.10"], "ports": "T:22,80,443"},
+            "vts": [{"oid": oid} for oid in selected_oids],
+        },
+        wait_before_results=0,
+        create_retry_delay=0,
+        results_timeout=10,
+        results_poll_interval=0.1,
+        min_results=125,
+        vt_index=vt_index,
+    )
+
+    result_oids = {finding["oid"] for finding in result.results}
+    assert result.findings_summary["total"] == 125
+    assert result_oids == set(selected_oids)
+    assert {finding["id"] for finding in result.results} == set(range(125))
+    assert result.findings_summary["by_type"]["alarm"] > 0
+    assert result.findings_summary["by_type"]["log"] > 0
+    assert all(
+        enriched["feed-metadata-source"] == "vt"
+        for enriched in result.enriched_results
+    )
+    assert all(
+        enriched["vt-metadata-status"] == "matched"
+        for enriched in result.enriched_results
+    )
 
 
 def test_cli_commands_work_against_mock_server(mock_server: str, tmp_path: Path):

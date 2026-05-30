@@ -1,0 +1,68 @@
+[
+  {
+    "oid": "1.3.6.1.4.1.25623.1.0.100034",
+    "name": "HTTP-Version Detection",
+    "filename": "gb_http_version_detect.nasl",
+    "family": "Service detection",
+    "category": "gather_info",
+    "severity": 0.0,
+    "qod": 80,
+    "cpe": ["cpe:/a:apache:http_server"],
+    "references": [],
+    "tag": {
+      "summary": "Detects the HTTP server product and version exposed by the target service.",
+      "solution": "No remediation is required for an informational detection result."
+    }
+  },
+  {
+    "oid": "1.3.6.1.4.1.25623.1.0.147696",
+    "name": "Ghostscript 9.50 < 9.55.0 Sandbox Escape Vulnerability - Linux",
+    "filename": "2022/artifex/gb_ghostscript_sandbox_escape_vuln_sep21_lin.nasl",
+    "family": "General",
+    "category": "gather_info",
+    "severity": 9.8,
+    "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+    "qod": 97,
+    "cpe": ["cpe:/a:artifex:ghostscript"],
+    "references": [{"class": "cve", "id": "CVE-2021-3781"}],
+    "tag": {
+      "summary": "Ghostscript is vulnerable to a sandbox escape issue.",
+      "solution": "Update Ghostscript to version 9.55.0 or later.",
+      "solution_type": "VendorFix"
+    }
+  },
+  {
+    "oid": "1.3.6.1.4.1.25623.1.0.117812",
+    "name": "Apache HTTP Server 2.4.49 Path Traversal and File Disclosure Vulnerability",
+    "filename": "2021/apache/gb_apache_httpd_path_traversal_cve_2021_41773.nasl",
+    "family": "Web Servers",
+    "category": "attack",
+    "severity": 7.5,
+    "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+    "qod": 98,
+    "cpe": ["cpe:/a:apache:http_server:2.4.49"],
+    "references": [{"class": "cve", "id": "CVE-2021-41773"}],
+    "tag": {
+      "summary": "Apache HTTP Server 2.4.49 can expose files outside configured document roots.",
+      "solution": "Update Apache HTTP Server to a fixed vendor release.",
+      "solution_type": "VendorFix"
+    }
+  },
+  {
+    "oid": "1.3.6.1.4.1.25623.1.0.900001",
+    "name": "Ubuntu: OpenSSL Security Advisory",
+    "filename": "notus/ubuntu_openssl_compat.notus",
+    "family": "Linux Local Security Checks",
+    "category": "package",
+    "severity": 7.4,
+    "cvss_vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N",
+    "qod": 97,
+    "cpe": ["cpe:/a:openssl:openssl"],
+    "references": [{"class": "cve", "id": "CVE-2022-0778"}],
+    "tag": {
+      "summary": "The installed OpenSSL package is affected by a certificate parsing denial-of-service issue.",
+      "solution": "Install the vendor fixed OpenSSL package.",
+      "solution_type": "VendorFix"
+    }
+  }
+]

@@ -68,20 +68,27 @@ Supported environment variables:
 The Docker image and local package expose `openvas-example` for scanner lifecycle examples and
 `openvas-enrich-results` for standalone result enrichment.
 
-## Quick commit smoke test with `openvas-mock-sanner`
+## Quick commit smoke test with `openvas-mock-scanner`
 
 For fast commit-time coverage, this repo can exercise its real HTTP client and CLI against the
 baseline mock scanner from
-[`clawosiris/openvas-mock-sanner`](https://github.com/clawosiris/openvas-mock-sanner). This is much
-lighter than the full Compose/OpenVAS stack and is intended as an early smoke check, not a
-replacement for the self-hosted e2e workflow.
+[`clawosiris/openvas-mock-sanner`](https://github.com/clawosiris/openvas-mock-sanner). CI pins the
+published `ghcr.io/clawosiris/openvas-mock-scanner:v0.2.1` release instead of a floating `:latest`
+tag so mock-backed validation only changes when this repository intentionally updates the selected
+mock scanner release. This is much lighter than the full Compose/OpenVAS stack and is intended as
+the default scanner-facing gate for short-lived pull requests.
 
 Local example against the published container image:
 
 ```bash
-OPENVAS_MOCK_SCANNER_IMAGE=ghcr.io/clawosiris/openvas-mock-scanner:latest \
+OPENVAS_MOCK_SCANNER_IMAGE=ghcr.io/clawosiris/openvas-mock-scanner:v0.2.1 \
   uv run pytest tests/test_mock_server_smoke.py
 ```
+
+The mock test suite includes a feed-backed compatibility scenario using fixture data under
+`tests/data/mock-feed`. Those fixtures mirror the Greenbone feed shapes consumed by the real scan
+enrichment flow: VT metadata, Notus-style package advisory data, SCAP/CVE metadata, target services,
+and a larger paged result set.
 
 If you do not have a container runtime available, the smoke test still supports a
 local source checkout fallback:
@@ -437,6 +444,11 @@ The self-hosted e2e workflow runs `greenbone-feed-sync` before starting the scan
 intentionally keeps the named feed volumes (`vt_data_vol`, `notus_data_vol`, `data_objects_vol`,
 `gpg_data_vol`) between runs so Greenbone feed data is updated incrementally instead of re-fetched
 from scratch every time. Transient scanner state volumes are removed during teardown.
+
+CI is split by validation cost. Unit tests and the pinned mock-backed compatibility test run for
+normal pull requests. The heavyweight real scan runs in addition to the mock-backed checks for pull
+requests targeting `main`, manual `workflow_dispatch` validation, pushes to `main`, and release tag
+pushes such as `v1.2.3`.
 
 ## Reference docs
 

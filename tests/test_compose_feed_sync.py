@@ -53,8 +53,27 @@ def test_ci_runs_feed_sync_before_scanner_stack_and_keeps_feed_volumes():
     assert "scan-examples_data_objects_vol" not in WORKFLOW
 
 
+def test_ci_uses_released_mock_scanner_and_gates_real_scan():
+    assert (
+        "OPENVAS_MOCK_SCANNER_IMAGE: ghcr.io/clawosiris/openvas-mock-scanner:v0.2.1"
+        in WORKFLOW
+    )
+    assert "openvas-mock-scanner:latest" not in WORKFLOW
+    assert "github.base_ref == 'main'" in WORKFLOW
+    assert "startsWith(github.ref, 'refs/tags/v')" in WORKFLOW
+    assert "github.event_name == 'workflow_dispatch'" in WORKFLOW
+
+
 def test_readme_documents_feed_sync_flow():
     assert "docker compose up greenbone-feed-sync" in README
     assert "greenbone-feed-sync --type gvmd-data" in README
     normalized_readme = " ".join(README.split())
     assert "subsequent synchronizations only fetch deltas" in normalized_readme
+
+
+def test_readme_documents_fast_mock_and_real_scan_split():
+    normalized_readme = " ".join(README.split())
+    assert "ghcr.io/clawosiris/openvas-mock-scanner:v0.2.1" in README
+    assert "floating `:latest` tag" in normalized_readme
+    assert "pull requests targeting `main`" in normalized_readme
+    assert "release tag pushes" in normalized_readme

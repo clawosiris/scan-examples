@@ -60,6 +60,51 @@ def test_get_results_accepts_wrapped_results():
     assert client.get_results("scan-123") == [{"id": 1}]
 
 
+def test_get_results_follows_openvasd_result_pages():
+    client = OpenVASScannerClient("http://scanner")
+    client.session = DummySession(
+        [
+            make_response(
+                payload={
+                    "results": [{"id": 1}, {"id": 2}],
+                    "offset": 0,
+                    "limit": 2,
+                    "total": 5,
+                    "next_offset": 2,
+                }
+            ),
+            make_response(
+                payload={
+                    "results": [{"id": 3}, {"id": 4}],
+                    "offset": 2,
+                    "limit": 2,
+                    "total": 5,
+                    "next_offset": 4,
+                }
+            ),
+            make_response(
+                payload={
+                    "results": [{"id": 5}],
+                    "offset": 4,
+                    "limit": 2,
+                    "total": 5,
+                    "next_offset": None,
+                }
+            ),
+        ]
+    )
+
+    assert client.get_results("scan-123") == [
+        {"id": 1},
+        {"id": 2},
+        {"id": 3},
+        {"id": 4},
+        {"id": 5},
+    ]
+    assert client.session.calls[1]["params"] == {"offset": 2, "limit": 2}
+    assert client.session.calls[2]["params"] == {"offset": 4, "limit": 2}
+
+
 def test_get_scan_status_returns_status_payload():
     client = OpenVASScannerClient("http://scanner")
     client.session = DummySession([make_response(payload={"status": "succeeded"})])
