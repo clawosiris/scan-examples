@@ -58,7 +58,7 @@ jobs:
       # Pinned to the released mock artifact so fast scanner-facing CI does not
       # drift with a moving :latest tag. Update this deliberately after reading
       # the mock scanner release notes.
-      OPENVAS_MOCK_SCANNER_IMAGE: ghcr.io/clawosiris/openvas-mock-scanner:v0.2.1
+      OPENVAS_MOCK_SCANNER_IMAGE: ghcr.io/clawosiris/openvas-mock-scanner:0.2.1
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5

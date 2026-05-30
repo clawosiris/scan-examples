@@ -73,7 +73,7 @@ The Docker image and local package expose `openvas-example` for scanner lifecycl
 For fast commit-time coverage, this repo can exercise its real HTTP client and CLI against the
 baseline mock scanner from
 [`clawosiris/openvas-mock-sanner`](https://github.com/clawosiris/openvas-mock-sanner). CI pins the
-published `ghcr.io/clawosiris/openvas-mock-scanner:v0.2.1` release instead of a floating `:latest`
+published `ghcr.io/clawosiris/openvas-mock-scanner:0.2.1` release instead of a floating `:latest`
 tag so mock-backed validation only changes when this repository intentionally updates the selected
 mock scanner release. This is much lighter than the full Compose/OpenVAS stack and is intended as
 the default scanner-facing gate for short-lived pull requests.
@@ -81,7 +81,7 @@ the default scanner-facing gate for short-lived pull requests.
 Local example against the published container image:
 
 ```bash
-OPENVAS_MOCK_SCANNER_IMAGE=ghcr.io/clawosiris/openvas-mock-scanner:v0.2.1 \
+OPENVAS_MOCK_SCANNER_IMAGE=ghcr.io/clawosiris/openvas-mock-scanner:0.2.1 \
   uv run pytest tests/test_mock_server_smoke.py
 ```
 
