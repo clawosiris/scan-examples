@@ -55,7 +55,7 @@ def test_ci_runs_feed_sync_before_scanner_stack_and_keeps_feed_volumes():
 
 def test_ci_uses_released_mock_scanner_and_gates_real_scan():
     assert (
-        "OPENVAS_MOCK_SCANNER_IMAGE: ghcr.io/clawosiris/openvas-mock-scanner:v0.2.1"
+        "OPENVAS_MOCK_SCANNER_IMAGE: ghcr.io/clawosiris/openvas-mock-scanner:0.2.1"
         in WORKFLOW
     )
     assert "openvas-mock-scanner:latest" not in WORKFLOW
@@ -73,7 +73,7 @@ def test_readme_documents_feed_sync_flow():
 
 def test_readme_documents_fast_mock_and_real_scan_split():
     normalized_readme = " ".join(README.split())
-    assert "ghcr.io/clawosiris/openvas-mock-scanner:v0.2.1" in README
+    assert "ghcr.io/clawosiris/openvas-mock-scanner:0.2.1" in README
     assert "floating `:latest` tag" in normalized_readme
     assert "pull requests targeting `main`" in normalized_readme
     assert "release tag pushes" in normalized_readme
