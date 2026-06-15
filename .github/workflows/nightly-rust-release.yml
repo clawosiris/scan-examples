@@ -9,9 +9,9 @@ jobs:
   build-nightly-rust-binary:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v8.2.0
         with:
           python-version: '3.11'
           enable-cache: true
@@ -39,7 +39,7 @@ jobs:
           sha256sum dist/scan-enrich-results-linux-x86_64 > dist/scan-enrich-results-linux-x86_64.sha256
 
       - name: Upload nightly binary artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: scan-enrich-results-nightly-linux-x86_64
           path: dist/

@@ -2,7 +2,7 @@ name: tests
 
 on:
   push:
-    branches: [main, devel]
+    branches: [main]
     tags:
       - 'v*'
   pull_request:
@@ -32,8 +32,8 @@ jobs:
   unit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8.2.0
         with:
           python-version: '3.11'
           enable-cache: true
@@ -60,8 +60,8 @@ jobs:
       # the mock scanner release notes.
       OPENVAS_MOCK_SCANNER_IMAGE: ghcr.io/clawosiris/openvas-mock-scanner:0.2.1
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8.2.0
         with:
           python-version: '3.11'
           enable-cache: true
@@ -81,7 +81,7 @@ jobs:
     runs-on: [self-hosted, Linux, X64, hetzner-vps-scan-examples, scan-examples-e2e]
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Show Docker environment
         run: |
           docker --version
@@ -139,7 +139,7 @@ jobs:
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --no-color > artifacts/docker-compose.log
       - name: Upload artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: scan-examples-e2e-artifacts
           path: artifacts/
